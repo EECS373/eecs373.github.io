@@ -17,7 +17,7 @@
       <a href="#submit" data-nav="submit" aria-current="page">Submit a print</a>
       <a href="#status" data-nav="status">Request status</a>
       <a href="#queue" data-nav="queue">Lab queue</a>
-      <a href="https://jamescarl.net/prints/#staff" class="staff-nav" target="_blank" rel="noopener noreferrer">Staff ↗</a>
+      <a href="https://prints-admin.jamescarl.net/prints/#staff" class="staff-nav" target="_blank" rel="noopener noreferrer">Staff ↗</a>
     </nav>
     <div id="global-message" class="global-message" role="alert" hidden></div>
     <main id="main">
@@ -58,7 +58,7 @@
           </div>
           <div class="policies"><p>Staff prints all parts. PLA/PETG only. First come; staff approves priority changes.</p><p>Other printers: <a href="https://www.eecs.umich.edu/hub/lessons.html" target="_blank" rel="noopener noreferrer">MESH/CSE</a> (EECS 373 filament available from staff), <a href="https://docs.google.com/forms/d/e/1FAIpQLSdzEFp99KQTYH3R174JkJYH-EUHG8X9hP5fjFPIaWVvcxSuwA/viewform" target="_blank" rel="noopener noreferrer">Robotics</a>, <a href="https://sites.google.com/umich.edu/groundconnections/fabrication-underground/3d-printing-service" target="_blank" rel="noopener noreferrer">Fabrication Underground</a>.</p></div>
         </form>
-        <section id="review-panel" class="review-panel" aria-labelledby="review-heading" hidden><h2 id="review-heading">Review request</h2><dl id="review-project" class="details-list"></dl><ol id="review-parts" class="review-parts"></ol><div class="actions"><button id="edit-request" type="button" class="button secondary">Edit</button><button id="submit-request" type="button" class="button primary">Submit request</button></div><div id="upload-progress-panel" class="upload-progress" hidden><label for="upload-progress" id="upload-progress-label">Uploading files…</label><progress id="upload-progress" max="100" value="0"></progress></div></section>
+        <section id="review-panel" class="review-panel" aria-labelledby="review-heading" hidden><h2 id="review-heading">Review request</h2><dl id="review-project" class="details-list"></dl><ol id="review-parts" class="review-parts"></ol><div class="actions"><button id="edit-request" type="button" class="button secondary">Edit</button><button id="submit-request" type="button" class="button primary">Submit request</button></div><p id="upload-cooldown" class="field-help" hidden>Try again in <span id="upload-cooldown-time" role="timer" aria-live="off"></span>.</p><div id="upload-progress-panel" class="upload-progress" hidden><label for="upload-progress" id="upload-progress-label">Uploading files…</label><progress id="upload-progress" max="100" value="0"></progress></div></section>
         <div id="submission-success" class="success-panel" hidden><h2>Request submitted</h2><p id="submission-receipt"></p><div class="actions"><button id="view-submitted-status" type="button" class="button primary">View status</button><button id="new-request" type="button" class="button secondary">Submit another request</button></div></div>
         <p id="submission-message" class="message" role="status"></p>
       </section>

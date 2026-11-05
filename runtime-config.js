@@ -16,8 +16,23 @@ export function endpointUrl(path, runtime) {
 
 export function credentialsForEndpoint(path, runtime, documentUrl) {
   const staff = /^admin(?:\/|$)/.test(String(path).replace(/^\/+/, ''));
-  if (!staff) return 'omit';
+  const documentOrigin = new URL(documentUrl).origin;
+  const sameApiOrigin = new URL(runtime.apiBase).origin === documentOrigin;
+  const onStaffOrigin = new URL(runtime.staffUrl).origin === documentOrigin;
+  // The protected full app needs its Cloudflare Access cookie on config and
+  // other public API calls too. Student builds never send cookies.
+  if (!staff) return !runtime.studentOnly && sameApiOrigin && onStaffOrigin ? 'same-origin' : 'omit';
   if (runtime.studentOnly) throw new Error('Staff access is available on the staff site.');
-  if (new URL(runtime.apiBase).origin !== new URL(documentUrl).origin) throw new Error('Staff API access must use the same origin as the staff page.');
+  if (!sameApiOrigin) throw new Error('Staff API access must use the same origin as the staff page.');
+  if (!onStaffOrigin) throw new Error('Staff access is available on the staff site.');
   return 'same-origin';
+}
+
+export function staffRedirectUrl(hash, runtime, documentUrl) {
+  const match = /^#?(?:admin|staff)(\?.*)?$/.exec(hash);
+  if (!match) return null;
+  const target = new URL(runtime.staffUrl);
+  if (!runtime.studentOnly && target.origin === new URL(documentUrl).origin) return null;
+  if (match[1]) target.hash = `staff${match[1]}`;
+  return target.href;
 }

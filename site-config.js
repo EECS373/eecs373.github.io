@@ -2,5 +2,5 @@
 export const SITE_CONFIG = Object.freeze({
   "studentOnly": true,
   "apiBase": "https://jamescarl.net/prints/",
-  "staffUrl": "https://jamescarl.net/prints/#staff"
+  "staffUrl": "https://prints-admin.jamescarl.net/prints/#staff"
 });

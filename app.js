@@ -1,6 +1,7 @@
 import { parseSTL, STLViewer } from './stl-viewer.js';
 import { SITE_CONFIG } from './site-config.js';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint } from './runtime-config.js';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -17,7 +18,9 @@ let parsing = false;
 let submitting = false;
 let reviewed = null;
 let submissionKey = null;
-let finalizedPayload = null;
+let uploadAttempt = null;
+const uploadCooldown = new UploadCooldown();
+let cooldownTimer = null;
 let lastReceipt = null;
 let statusEmail = '';
 let statusRequestSequence = 0;
@@ -59,10 +62,6 @@ function globalMessage(text = '') {
   $('#global-message').hidden = !text;
 }
 
-function errorText(payload, fallback) {
-  return typeof payload?.error === 'string' ? payload.error : payload?.error?.message || payload?.message || fallback;
-}
-
 async function api(path, { method = 'GET', body, admin = false, headers = {}, timeout = 30000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -76,9 +75,7 @@ async function api(path, { method = 'GET', body, admin = false, headers = {}, ti
     try { payload = await response.json(); } catch { payload = null; }
     if (!response.ok) {
       if (admin && response.status === 401) staffController?.signOut();
-      const error = new Error(errorText(payload, response.status === 413 ? 'The upload is too large for the server.' : `Request failed (${response.status}).`));
-      error.status = response.status;
-      throw error;
+      throw responseError(payload, response.status === 413 ? 'The upload is too large for the server.' : `Request failed (${response.status}).`, response.status, response.headers.get('Retry-After'));
     }
     return payload || {};
   } catch (error) {
@@ -313,7 +310,7 @@ $('#submission-form').addEventListener('submit', event => {
     validateParts();
     reviewed = { email, groupName, neededBy: $('#needed-by').value || null, specialInstructions: $('#instructions').value.trim(), parts: parts.map(part => ({ ...part, ...optionsOf(part) })) };
     submissionKey = createId();
-    finalizedPayload = null;
+    uploadAttempt = new StagedRequest(reviewed, submissionKey, uploadCooldown);
     appendDetails($('#review-project'), [['Group', reviewed.groupName], ['Email', reviewed.email], ['Needed by', formatDeadline(reviewed.neededBy)], ['Instructions', reviewed.specialInstructions]]);
     $('#review-parts').replaceChildren();
     for (const part of reviewed.parts) {
@@ -325,12 +322,26 @@ $('#submission-form').addEventListener('submit', event => {
     }
     $('#submission-form').hidden = true;
     $('#review-panel').hidden = false;
+    updateSubmissionControls();
     setMessage('#submission-message');
     $('#review-heading').scrollIntoView({ block: 'start' });
   } catch (error) { setMessage('#submission-message', error.message, true); }
 });
 
-$('#edit-request').addEventListener('click', () => { if (submitting) return; $('#review-panel').hidden = true; $('#submission-form').hidden = false; finalizedPayload = null; setMessage('#submission-message'); });
+$('#edit-request').addEventListener('click', () => { if (submitting) return; $('#review-panel').hidden = true; $('#submission-form').hidden = false; uploadAttempt = null; setMessage('#submission-message'); });
+
+function updateSubmissionControls() {
+  const remaining = uploadCooldown.remainingSeconds;
+  $('#submit-request').disabled = submitting || remaining > 0;
+  $('#submit-request').textContent = submitting ? 'Submitting…' : remaining ? `Retry in ${formatRetryTime(remaining)}` : uploadAttempt?.attempted ? 'Retry request' : 'Submit request';
+  $('#edit-request').disabled = submitting;
+  $('#upload-cooldown').hidden = !remaining;
+  $('#upload-cooldown-time').textContent = formatRetryTime(remaining);
+  if (remaining && !cooldownTimer) cooldownTimer = setInterval(() => {
+    updateSubmissionControls();
+    if (!uploadCooldown.remainingSeconds) { clearInterval(cooldownTimer); cooldownTimer = null; setMessage('#submission-message', 'You can retry now. Your parts are kept.'); }
+  }, 1000);
+}
 
 function uploadFile(file, token, onProgress) {
   return new Promise((resolve, reject) => {
@@ -343,46 +354,38 @@ function uploadFile(file, token, onProgress) {
     xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.min(event.loaded / event.total, 1)); };
     xhr.onerror = () => reject(new Error('Upload interrupted. Check your connection and try again.'));
     xhr.ontimeout = () => reject(new Error('Upload timed out. Please try again.'));
-    xhr.onload = () => { let payload; try { payload = JSON.parse(xhr.responseText); } catch { payload = null; } if (xhr.status < 200 || xhr.status >= 300) reject(new Error(errorText(payload, xhr.status === 413 ? `${file.name} exceeds the server upload limit.` : `Upload failed (${xhr.status}).`))); else if (!payload?.uploadId) reject(new Error('The server did not confirm the uploaded file.')); else resolve(payload); };
+    xhr.onload = () => { let payload; try { payload = JSON.parse(xhr.responseText); } catch { payload = null; } if (xhr.status < 200 || xhr.status >= 300) reject(responseError(payload, xhr.status === 413 ? `${file.name} exceeds the server upload limit.` : `Upload failed (${xhr.status}).`, xhr.status, xhr.getResponseHeader('Retry-After'))); else if (!payload?.uploadId) reject(new Error('The server did not confirm the uploaded file.')); else resolve(payload); };
     const form = new FormData(); form.append('file', file, file.name); xhr.send(form);
   });
 }
 
 $('#submit-request').addEventListener('click', async () => {
-  if (!reviewed || submitting) return;
+  if (!reviewed || submitting || uploadCooldown.remainingSeconds) { updateSubmissionControls(); return; }
   submitting = true;
-  $('#submit-request').disabled = true; $('#edit-request').disabled = true;
+  updateSubmissionControls();
   $('#upload-progress-panel').hidden = false;
   setMessage('#submission-message');
   try {
-    if (!finalizedPayload) {
-      const session = await api('upload-sessions', { method: 'POST', body: {} });
-      if (!session.uploadToken) throw new Error('The server could not start an upload.');
-      const uploaded = [];
-      const totalBytes = reviewed.parts.reduce((sum, part) => sum + part.file.size, 0);
-      let completedBytes = 0;
-      for (let index = 0; index < reviewed.parts.length; index++) {
-        const part = reviewed.parts[index];
-        $('#upload-progress-label').textContent = `Uploading ${index + 1} of ${reviewed.parts.length}: ${part.file.name}`;
-        const result = await uploadFile(part.file, session.uploadToken, fraction => { $('#upload-progress').value = Math.round((completedBytes + part.file.size * fraction) / totalBytes * 100); });
-        completedBytes += part.file.size;
-        uploaded.push({ uploadId: result.uploadId, quantity: part.quantity, ...optionsOf(part) });
-      }
-      finalizedPayload = { email: reviewed.email, groupName: reviewed.groupName, neededBy: reviewed.neededBy, specialInstructions: reviewed.specialInstructions, uploadToken: session.uploadToken, parts: uploaded };
-    }
-    $('#upload-progress').value = 100;
-    $('#upload-progress-label').textContent = 'Saving request…';
-    const result = await api('requests', { method: 'POST', body: finalizedPayload, headers: { 'X-Idempotency-Key': submissionKey }, timeout: 60000 });
+    uploadAttempt ||= new StagedRequest(reviewed, submissionKey, uploadCooldown);
+    const result = await uploadAttempt.send({
+      startSession: () => api('upload-sessions', { method: 'POST', body: {} }),
+      uploadFile,
+      finalize: (body, key) => api('requests', { method: 'POST', body, headers: { 'X-Idempotency-Key': key }, timeout: 60000 }),
+      onProgress: progress => {
+        $('#upload-progress').value = progress.percent;
+        $('#upload-progress-label').textContent = progress.stage === 'saving' ? 'Saving request…' : `Uploading ${progress.index + 1} of ${reviewed.parts.length}: ${progress.filename}`;
+      },
+    });
     if (!result.request?.requestNumber) throw new Error('The server did not return a request number. Retry to check this submission.');
     lastReceipt = { ...result.request, email: reviewed.email };
     $('#review-panel').hidden = true;
     $('#submission-success').hidden = false;
     $('#submission-receipt').textContent = `${lastReceipt.requestNumber} · ${lastReceipt.status || 'Submitted'} · ${reviewed.parts.length} file(s), ${reviewed.parts.reduce((sum, part) => sum + part.quantity, 0)} pieces`;
-    parts = []; selectedPartId = null; reviewed = null; finalizedPayload = null;
+    parts = []; selectedPartId = null; reviewed = null; uploadAttempt = null;
     renderFiles(); renderPartEditor();
     $('#submission-receipt').scrollIntoView({ block: 'center' });
-  } catch (error) { setMessage('#submission-message', error.message + (finalizedPayload ? '\nYou can safely retry this submission.' : ''), true); }
-  finally { submitting = false; $('#submit-request').disabled = false; $('#edit-request').disabled = false; $('#upload-progress-panel').hidden = true; }
+  } catch (error) { setMessage('#submission-message', uploadCooldown.remainingSeconds ? 'Uploads paused. Your parts are kept.' : error.message + (uploadAttempt?.finalizedPayload ? '\nYou can safely retry this submission.' : ''), !uploadCooldown.remainingSeconds); }
+  finally { submitting = false; updateSubmissionControls(); $('#upload-progress-panel').hidden = true; }
 });
 
 $('#view-submitted-status').addEventListener('click', () => { if (!lastReceipt) return; $('#status-email').value = lastReceipt.email; location.hash = '#status'; lookupStatus(lastReceipt.email); });
@@ -458,7 +461,8 @@ $('#refresh-queue').addEventListener('click', loadPublicQueue);
 
 async function navigate() {
   const route = location.hash.slice(1).split('?')[0];
-  if (runtime.studentOnly && ['admin','staff'].includes(route)) { location.assign(runtime.staffUrl); return; }
+  const staffRedirect = staffRedirectUrl(location.hash, runtime, location.href);
+  if (staffRedirect) { location.assign(staffRedirect); return; }
   const normalizedRoute = route === 'staff' ? 'admin' : route;
   page = ['submit', 'status', 'queue', 'admin'].includes(normalizedRoute) ? normalizedRoute : 'submit';
   $$('[data-page]').forEach(section => { section.hidden = section.dataset.page !== page; });
