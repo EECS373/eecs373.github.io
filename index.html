@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#00274c">
+  <meta name="description" content="EECS 373/473 3D print requests and queue.">
+  <title>EECS Print Lab</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="app-shell">
+    <header class="site-header"><a class="brand" href="#submit" aria-label="EECS Print Lab home"><span class="brand-mark" aria-hidden="true">3D</span><span><strong>EECS Print Lab</strong><small>373 / 473 · Staff</small></span></a><span class="header-printer">Bambu X2D</span></header>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="#submit" data-nav="submit" aria-current="page">Submit a print</a>
+      <a href="#status" data-nav="status">Request status</a>
+      <a href="#queue" data-nav="queue">Lab queue</a>
+      <a href="https://jamescarl.net/prints/#staff" class="staff-nav" target="_blank" rel="noopener noreferrer">Staff ↗</a>
+    </nav>
+    <div id="global-message" class="global-message" role="alert" hidden></div>
+    <main id="main">
+      <section data-page="submit" aria-labelledby="submit-heading">
+        <div class="page-heading"><h1 id="submit-heading">Submit a print</h1><span class="tag">PLA / PETG</span></div>
+        <form id="submission-form">
+          <div class="submission-grid">
+            <div class="parts-column">
+              <div class="section-heading"><h2>Parts</h2><span>10 STL files max · 10 MB each</span></div>
+              <div class="drop-zone" id="drop-zone"><label for="files"><strong>Add STL files</strong><input id="files" type="file" accept=".stl" multiple aria-describedby="upload-limits"></label><span id="upload-limits" class="muted">Choose files or drop them here</span></div>
+              <div id="file-list" class="file-list" aria-label="Parts to print"></div>
+              <div id="empty-parts" class="empty-state">Add an STL to preview it.</div>
+              <div id="preview-panel" hidden>
+                <div class="viewer"><div class="viewer-toolbar"><span class="tag">3D preview</span><button id="reset-view" type="button" class="button plain">Reset view</button></div><canvas id="model-canvas" aria-label="3D preview of the selected part. Drag to orbit, or use the rotation slider."></canvas><div class="viewer-caption"><span id="preview-filename"></span><span>Drag to orbit</span></div></div>
+                <p id="preview-unavailable" class="muted" hidden></p>
+                <label class="rotation-control" for="rotation">Rotate part<input id="rotation" type="range" min="-180" max="180" value="-28"></label>
+                <div class="dimension-row"><div><span class="eyebrow">Width × depth × height</span><strong id="dimensions">—</strong></div><label for="unit">STL units<select id="unit"><option value="mm">Millimeters</option><option value="inch">Inches</option></select></label></div>
+                <p id="fit-message" class="fit-message" aria-live="polite"></p><p class="muted small">X2D: 256 × 256 × 260 mm · Staff approval required</p>
+              </div>
+            </div>
+            <div class="details-column">
+              <div class="section-heading"><h2>Project</h2><span>* Required</span></div>
+              <label class="field" for="email">UMich email *<input id="email" type="email" placeholder="uniqname@umich.edu" required maxlength="254" autocomplete="email" autocapitalize="none" spellcheck="false" aria-describedby="email-help"></label>
+              <p id="email-help" class="field-help">@umich.edu only · No account required</p>
+              <label class="field" for="group-name">Group number and name *<input id="group-name" required maxlength="160" autocomplete="off"></label>
+              <fieldset id="part-settings" class="part-settings" disabled>
+                <legend id="part-name">Part settings</legend>
+                <fieldset class="material-fieldset"><legend>Material</legend><div class="materials"><label><input type="radio" name="material" value="PLA" checked> PLA</label><label><input type="radio" name="material" value="PETG"> PETG</label></div></fieldset>
+                <label class="field" for="first-color">First color preference *<input id="first-color" required maxlength="100" value="White" list="colors"></label>
+                <datalist id="colors"></datalist><div id="swatches" class="swatches" aria-label="First color choices"></div>
+                <label for="custom-color" class="custom-color">Custom color<input id="custom-color" type="color" value="#e7e5d4"></label>
+                <div class="field-pair"><label class="field" for="second-color">Second color preference<input id="second-color" maxlength="100" list="colors" placeholder="Optional"></label><label class="field" for="backup-color">Backup color preference *<input id="backup-color" required maxlength="100" value="Grey" list="colors"></label></div>
+              </fieldset>
+              <label class="field" for="needed-by">Needed by?<input id="needed-by" type="date"></label>
+              <label class="field" for="instructions">Special instructions<textarea id="instructions" rows="3" maxlength="5000"></textarea></label>
+              <button id="review-button" type="submit" class="button primary full" disabled>Review request</button>
+            </div>
+          </div>
+          <div class="policies"><p>Staff prints all parts. PLA/PETG only. First come; staff approves priority changes.</p><p>Other printers: <a href="https://www.eecs.umich.edu/hub/lessons.html" target="_blank" rel="noopener noreferrer">MESH/CSE</a> (EECS 373 filament available from staff), <a href="https://docs.google.com/forms/d/e/1FAIpQLSdzEFp99KQTYH3R174JkJYH-EUHG8X9hP5fjFPIaWVvcxSuwA/viewform" target="_blank" rel="noopener noreferrer">Robotics</a>, <a href="https://sites.google.com/umich.edu/groundconnections/fabrication-underground/3d-printing-service" target="_blank" rel="noopener noreferrer">Fabrication Underground</a>.</p></div>
+        </form>
+        <section id="review-panel" class="review-panel" aria-labelledby="review-heading" hidden><h2 id="review-heading">Review request</h2><dl id="review-project" class="details-list"></dl><ol id="review-parts" class="review-parts"></ol><div class="actions"><button id="edit-request" type="button" class="button secondary">Edit</button><button id="submit-request" type="button" class="button primary">Submit request</button></div><div id="upload-progress-panel" class="upload-progress" hidden><label for="upload-progress" id="upload-progress-label">Uploading files…</label><progress id="upload-progress" max="100" value="0"></progress></div></section>
+        <div id="submission-success" class="success-panel" hidden><h2>Request submitted</h2><p id="submission-receipt"></p><div class="actions"><button id="view-submitted-status" type="button" class="button primary">View status</button><button id="new-request" type="button" class="button secondary">Submit another request</button></div></div>
+        <p id="submission-message" class="message" role="status"></p>
+      </section>
+
+      <section data-page="status" aria-labelledby="status-heading" hidden><div class="page-heading"><h1 id="status-heading">Request status</h1></div><form id="status-form" class="lookup-form"><label class="field" for="status-email">UMich email<input id="status-email" type="email" required maxlength="254" autocomplete="email" placeholder="uniqname@umich.edu" autocapitalize="none" spellcheck="false"></label><button type="submit" class="button primary">View status</button></form><p id="status-message" class="message" role="status"></p><div id="status-results" class="status-results"></div></section>
+
+      <section data-page="queue" aria-labelledby="queue-heading" hidden><div class="page-heading"><h1 id="queue-heading">Print queue</h1><button type="button" id="refresh-queue" class="button secondary">Refresh</button></div><p id="queue-message" class="message" role="status"></p><div id="active-prints" class="active-prints"></div><div class="section-heading queue-subheading"><h2>Up next</h2><span>Estimated times</span></div><div id="public-queue" class="public-queue"></div><p class="muted small queue-footnote">Estimates include handling time and may change after review.</p></section>
+    </main>
+    <footer class="site-footer"><span>EECS 373 / 473</span><span>Print requests</span></footer>
+  </div>
+</body>
+</html>
