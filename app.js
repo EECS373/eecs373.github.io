@@ -1,7 +1,7 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261105-header';
-import { SITE_CONFIG } from './site-config.js?v=20261105-header';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261105-header';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261105-header';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261105-backup-colors';
+import { SITE_CONFIG } from './site-config.js?v=20261105-backup-colors';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261105-backup-colors';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261105-backup-colors';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -282,7 +282,8 @@ $('#drop-zone').addEventListener('dragover', event => { event.preventDefault(); 
 $('#drop-zone').addEventListener('dragleave', () => $('#drop-zone').classList.remove('is-dragging'));
 $('#drop-zone').addEventListener('drop', event => { event.preventDefault(); $('#drop-zone').classList.remove('is-dragging'); addFiles([...event.dataTransfer.files]); });
 $$('input[name=material]').forEach(input => input.addEventListener('change', savePartOptions));
-for (const id of ['first-color', 'second-color', 'backup-color']) $(`#${id}`).addEventListener('input', savePartOptions);
+for (const id of ['first-color', 'second-color']) $(`#${id}`).addEventListener('input', savePartOptions);
+$('#backup-color').addEventListener('change', savePartOptions);
 $('#custom-color').addEventListener('input', event => { $('#first-color').value = event.target.value; savePartOptions(); });
 $('#unit').addEventListener('change', savePartOptions);
 $('#rotation').addEventListener('input', event => viewer.setYaw(Number(event.target.value)));
