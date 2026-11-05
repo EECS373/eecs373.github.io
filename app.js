@@ -1,7 +1,7 @@
-import { parseSTL, STLViewer } from './stl-viewer.js';
-import { SITE_CONFIG } from './site-config.js';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261105-access2';
+import { SITE_CONFIG } from './site-config.js?v=20261105-access2';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261105-access2';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261105-access2';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
