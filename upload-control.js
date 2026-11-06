@@ -89,8 +89,8 @@ export class StagedRequest {
           completedBytes += part.file.size;
           onProgress({ stage: 'upload', index, filename: part.file.name, percent: Math.round(completedBytes / totalBytes * 100) });
         }
-        const { email, groupName, neededBy, specialInstructions } = this.reviewed;
-        this.finalizedPayload = { email, groupName, neededBy, specialInstructions, uploadToken: this.uploadToken, parts: this.uploaded };
+        const { personName, email, groupName, neededBy, specialInstructions } = this.reviewed;
+        this.finalizedPayload = { personName, email, groupName, neededBy, specialInstructions, uploadToken: this.uploadToken, parts: this.uploaded };
       }
       onProgress({ stage: 'saving', percent: 100 });
       return await finalize(this.finalizedPayload, this.idempotencyKey);

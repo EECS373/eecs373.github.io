@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#00274c">
   <meta name="description" content="EECS 373/473 3D print requests and queue.">
   <title>EECS 373/473 3D Print Request</title>
-  <link rel="stylesheet" href="./styles.css?v=20261105-backup-colors">
-  <script type="module" src="./app.js?v=20261105-backup-colors"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261106-workflow">
+  <script type="module" src="./app.js?v=20261106-workflow"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -40,6 +40,7 @@
             </div>
             <div class="details-column">
               <div class="section-heading"><h2>Project</h2><span>* Required</span></div>
+              <label class="field" for="person-name">Name *<input id="person-name" required maxlength="200" autocomplete="name"></label>
               <label class="field" for="email">UMich email *<input id="email" type="email" placeholder="uniqname@umich.edu" required maxlength="254" autocomplete="email" autocapitalize="none" spellcheck="false" aria-describedby="email-help"></label>
               <p id="email-help" class="field-help">@umich.edu only · No account required</p>
               <label class="field" for="group-name">Group number and name *<input id="group-name" required maxlength="160" autocomplete="off"></label>
@@ -65,7 +66,7 @@
 
       <section data-page="status" aria-labelledby="status-heading" hidden><div class="page-heading"><h1 id="status-heading">Request status</h1></div><form id="status-form" class="lookup-form"><label class="field" for="status-email">UMich email<input id="status-email" type="email" required maxlength="254" autocomplete="email" placeholder="uniqname@umich.edu" autocapitalize="none" spellcheck="false"></label><button type="submit" class="button primary">View status</button></form><p id="status-message" class="message" role="status"></p><div id="status-results" class="status-results"></div></section>
 
-      <section data-page="queue" aria-labelledby="queue-heading" hidden><div class="page-heading"><h1 id="queue-heading">Print queue</h1><button type="button" id="refresh-queue" class="button secondary">Refresh</button></div><p id="queue-message" class="message" role="status"></p><div id="active-prints" class="active-prints"></div><div class="section-heading queue-subheading"><h2>Up next</h2><span>Estimated times</span></div><div id="public-queue" class="public-queue"></div><p class="muted small queue-footnote">Estimates include handling time and may change after review.</p></section>
+      <section data-page="queue" aria-labelledby="queue-heading" hidden><div class="page-heading"><h1 id="queue-heading">Print queue</h1><button type="button" id="refresh-queue" class="button secondary">Refresh</button></div><p id="queue-message" class="message" role="status"></p><div id="public-queue" class="public-queue"></div><p class="muted small queue-footnote">Completion times are staff estimates. Completed requests leave this queue after 48 hours.</p></section>
     </main>
     <footer class="site-footer"><span>EECS 373 / 473</span><span>Print requests</span></footer>
   </div>

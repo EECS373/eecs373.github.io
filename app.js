@@ -1,7 +1,8 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261105-backup-colors';
-import { SITE_CONFIG } from './site-config.js?v=20261105-backup-colors';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261105-backup-colors';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261105-backup-colors';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261106-workflow';
+import { SITE_CONFIG } from './site-config.js?v=20261106-workflow';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261106-workflow';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261106-workflow';
+import { STATUSES, COMPLETION_HOURS, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, publicQueueRecords, WorkflowActions } from './workflow.js?v=20261106-workflow';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -111,17 +112,8 @@ function formatDeadline(value) {
   return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('en-US', {timeZone:'UTC',month:'short',day:'numeric',year:'numeric'}).format(date) : String(value);
 }
 
-function pickupText(request) {
-  if (request.status === 'Ready for pickup') return 'Ready now';
-  if (request.status === 'Collected') return 'Collected';
-  if (request.status === 'Cancelled') return 'Cancelled';
-  if (request.status === 'Printed — inspection') return 'Awaiting inspection';
-  if (request.status === 'On hold') return 'On hold';
-  const estimate = request.estimatedPickup;
-  if (!estimate?.earliest || !estimate?.latest) return 'Awaiting staff estimate';
-  const day = value => new Intl.DateTimeFormat('en-US', {timeZone:'America/Detroit',year:'numeric',month:'numeric',day:'numeric'}).format(new Date(value));
-  const endOptions = day(estimate.earliest) === day(estimate.latest) ? {month:undefined,day:undefined} : {};
-  return `${formatDate(estimate.earliest)} – ${formatDate(estimate.latest, endOptions)}`;
+function completionText(request) {
+  return request.estimatedCompletionAt ? formatDate(request.estimatedCompletionAt, {year: 'numeric', timeZoneName: 'short'}) : 'Not set';
 }
 
 function formatHours(value) {
@@ -308,11 +300,13 @@ $('#submission-form').addEventListener('submit', event => {
     if (!allowedEmail(email) || !$('#email').checkValidity()) throw new Error('Use an @umich.edu email address.');
     const groupName = $('#group-name').value.trim();
     if (!groupName) throw new Error('Enter your group number and name.');
+    const personName = $('#person-name').value.trim();
+    if (!personName) throw new Error('Enter your name.');
     validateParts();
-    reviewed = { email, groupName, neededBy: $('#needed-by').value || null, specialInstructions: $('#instructions').value.trim(), parts: parts.map(part => ({ ...part, ...optionsOf(part) })) };
+    reviewed = { personName, email, groupName, neededBy: $('#needed-by').value || null, specialInstructions: $('#instructions').value.trim(), parts: parts.map(part => ({ ...part, ...optionsOf(part) })) };
     submissionKey = createId();
     uploadAttempt = new StagedRequest(reviewed, submissionKey, uploadCooldown);
-    appendDetails($('#review-project'), [['Group', reviewed.groupName], ['Email', reviewed.email], ['Needed by', formatDeadline(reviewed.neededBy)], ['Instructions', reviewed.specialInstructions]]);
+    appendDetails($('#review-project'), [['Name', reviewed.personName], ['Group', reviewed.groupName], ['Email', reviewed.email], ['Needed by', formatDeadline(reviewed.neededBy)], ['Instructions', reviewed.specialInstructions]]);
     $('#review-parts').replaceChildren();
     for (const part of reviewed.parts) {
       const item = document.createElement('li'); item.className = 'review-part';
@@ -410,7 +404,7 @@ async function lookupStatus(email = $('#status-email').value) {
       const header = document.createElement('header'); const id = document.createElement('h2'); id.textContent = request.requestNumber;
       const badge = document.createElement('span'); badge.className = 'status-badge'; badge.textContent = request.status;
       const details = document.createElement('dl'); details.className = 'details-list';
-      appendDetails(details, [['Queue position', request.status === 'Printing' ? 'Printing' : request.queuePosition ? `#${request.queuePosition}` : '—'], ['Estimated pickup', pickupText(request)], ['Last update', formatDate(request.updatedAt)]]);
+      appendDetails(details, [['Queue position', request.queuePosition ? `#${request.queuePosition}` : '—'], ['Estimated completion', completionText(request)], ['Last update', formatDate(request.updatedAt)]]);
       header.append(id, badge); card.append(header, details); $('#status-results').append(card);
     }
   } catch (error) { if (sequence === statusRequestSequence) setMessage('#status-message', error.message, true); }
@@ -427,34 +421,21 @@ async function loadPublicQueue() {
   setMessage('#queue-message', 'Loading…');
   try {
     const result = await api('queue');
-    $('#active-prints').replaceChildren(); $('#public-queue').replaceChildren();
-    for (const request of result.active || []) {
-      const card = document.createElement('article'); card.className = 'active-print';
-      const summary = document.createElement('div'); const id = document.createElement('p'); id.className = 'eyebrow'; id.textContent = `Printing · ${request.requestNumber}`;
-      const material = document.createElement('h2'); material.textContent = [request.materialSummary, request.colorSummary].filter(Boolean).join(' / ') || 'Printing';
-      const eta = document.createElement('p'); eta.textContent = pickupText(request);
-      summary.append(id, material, eta); card.append(summary);
-      if (request.progressPercent != null) {
-        const progress = Math.max(0, Math.min(100, Number(request.progressPercent)));
-        const display = document.createElement('div'); display.className = 'print-progress';
-        const label = document.createElement('small'); label.textContent = 'Estimated progress';
-        const percent = document.createElement('strong'); percent.textContent = `${Math.round(progress)}%`;
-        const track = document.createElement('div'); track.className = 'progress-track'; track.setAttribute('role', 'progressbar'); track.setAttribute('aria-label', `Print progress for ${request.requestNumber}`); track.setAttribute('aria-valuenow', String(progress)); track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100');
-        const fill = document.createElement('span'); fill.style.width = `${progress}%`; track.append(fill); display.append(label, percent, track); card.append(display);
-      }
-      $('#active-prints').append(card);
-    }
-    const requests = result.requests || [];
-    requests.forEach((request, index) => {
+    $('#public-queue').replaceChildren();
+    const requests = publicQueueRecords(result.requests || []);
+    for (const request of requests) {
       const row = document.createElement('div'); row.className = 'public-row';
-      const rank = document.createElement('span'); rank.className = 'queue-rank'; rank.textContent = String(request.queuePosition || index + 1).padStart(2, '0');
-      const title = document.createElement('div'); const id = document.createElement('strong'); id.textContent = request.requestNumber; const status = document.createElement('small'); status.textContent = request.status; title.append(id, status);
+      const rank = document.createElement('span'); rank.className = 'queue-rank'; rank.textContent = request.queuePosition ? `#${request.queuePosition}` : '—';
+      const title = document.createElement('div'); const id = document.createElement('strong'); id.textContent = request.requestNumber;
+      const status = document.createElement('small'); status.textContent = request.status; title.append(id, status);
       const material = document.createElement('span'); material.textContent = [request.materialSummary, request.colorSummary].filter(Boolean).join(' / ');
-      const timing = document.createElement('div'); timing.className = 'queue-estimate'; const eta = document.createElement('span'); eta.textContent = pickupText(request); const duration = document.createElement('small'); duration.textContent = `${request.plateCount ?? '—'} plate(s) · ${formatHours(request.totalPrintHours)}`; timing.append(eta, duration);
+      const timing = document.createElement('div'); timing.className = 'queue-estimate';
+      const label = document.createElement('small'); label.textContent = 'Estimated completion';
+      const eta = document.createElement('span'); eta.textContent = completionText(request); timing.append(label, eta);
+      if (request.completedAt) { const completed = document.createElement('small'); completed.textContent = `Completed: ${formatDate(request.completedAt, {timeZoneName:'short'})}`; timing.append(completed); }
       row.append(rank, title, material, timing); $('#public-queue').append(row);
-    });
-    setMessage('#queue-message', !requests.length && !(result.active || []).length ? 'No prints queued.' : '');
-    if (!requests.length) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = 'No approved requests waiting.'; $('#public-queue').append(empty); }
+    }
+    setMessage('#queue-message', requests.length ? '' : 'No requests in the queue.');
   } catch (error) { setMessage('#queue-message', error.message, true); }
   finally { publicQueueLoading = false; $('#refresh-queue').disabled = false; }
 }
@@ -480,11 +461,6 @@ async function initialize() {
     colors = config.colors && Object.keys(config.colors).length ? config.colors : fallbackColors;
     populateColors();
     renderPartEditor();
-    const statuses = config.statuses || ['Submitted','Needs review','Queued','On hold','Printing','Printed — inspection','Ready for pickup','Collected','Needs changes','Cancelled'];
-    if (!runtime.studentOnly) {
-      $('#job-status').replaceChildren();
-      for (const status of statuses) { const option = document.createElement('option'); option.value = status; option.textContent = status; $('#job-status').append(option); }
-    }
     configReady = true; $('#review-button').disabled = false; globalMessage();
   } catch (error) { globalMessage(`Portal unavailable: ${error.message}`); }
   await navigate();

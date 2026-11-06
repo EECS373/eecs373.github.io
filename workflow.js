@@ -1,0 +1,102 @@
+export const STATUSES = Object.freeze(['Submitted', 'Queued', 'In progress', 'On printer', 'In EECS 2334']);
+export const COMPLETION_HOURS = Object.freeze([1, 2, 3, 6, 12, 18, 24]);
+export const COMPLETED_STATUSES = Object.freeze(['On printer', 'In EECS 2334']);
+const zone = 'America/Detroit';
+const wallClock = new Intl.DateTimeFormat('en-CA', {timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
+
+export function completionInputValue(value) {
+  if (value == null || value === '') return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  const parts = Object.fromEntries(wallClock.formatToParts(date).map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+export function completionFromInput(value) {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) throw new Error('Choose a valid completion date and time.');
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const desired = Date.UTC(year, month - 1, day, hour, minute);
+  const normalized = new Date(desired).toISOString().slice(0, 16);
+  if (normalized !== value) throw new Error('Choose a valid completion date and time.');
+  let candidate = desired;
+  for (let index = 0; index < 4; index++) {
+    const shown = completionInputValue(candidate);
+    if (shown === value) return new Date(candidate).toISOString();
+    candidate += desired - Date.parse(`${shown}:00Z`);
+  }
+  throw new Error('That time does not exist in Eastern time. Choose another time.');
+}
+
+export function completionAfterHours(hours, now = Date.now()) {
+  if (!COMPLETION_HOURS.includes(Number(hours))) throw new Error('Choose a completion-time preset.');
+  return new Date(now + Number(hours) * 3600000).toISOString();
+}
+
+export function isCurrentRequest(request, now = Date.now()) {
+  if (!COMPLETED_STATUSES.includes(request.status) || !request.completedAt) return true;
+  const completed = new Date(request.completedAt).getTime();
+  return !Number.isFinite(completed) || now - completed < 48 * 3600000;
+}
+
+export function publicQueueRecords(requests, now = Date.now()) {
+  return requests.filter(request => STATUSES.includes(request.status) && isCurrentRequest(request, now)).map(request => ({
+    requestNumber: request.requestNumber, status: request.status,
+    queuePosition: request.queuePosition, estimatedCompletionAt: request.estimatedCompletionAt,
+    completedAt: request.completedAt, materialSummary: request.materialSummary, colorSummary: request.colorSummary,
+  }));
+}
+
+export function gmailComposeUrl(value) {
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.hostname !== 'mail.google.com' || !url.pathname.startsWith('/mail/') || url.username || url.password) throw new Error('Gmail returned an invalid compose link.');
+  return url.href;
+}
+
+function closePopup(popup) { try { popup?.close(); } catch { /* The user may already have closed it. */ } }
+
+export class WorkflowActions {
+  constructor() { this.busy = false; this.revision = 0; }
+
+  async read(loader) {
+    if (this.busy) return null;
+    const revision = this.revision;
+    const result = await loader();
+    return revision === this.revision ? result : null;
+  }
+
+  async run(action, onBusy = () => {}) {
+    if (this.busy) throw new Error('Another update is still saving.');
+    this.busy = true;
+    this.revision++;
+    try { onBusy(true); return await action(); }
+    finally { this.busy = false; onBusy(false); }
+  }
+
+  changeStatus(status, {openPopup, patch, loadGmail, onSaved = () => {}, onBusy}) {
+    if (!STATUSES.includes(status)) return Promise.reject(new Error('Choose a valid status.'));
+    return this.run(async () => {
+      const needsEmail = COMPLETED_STATUSES.includes(status);
+      let popup = null;
+      if (needsEmail) {
+        try { popup = openPopup(); if (popup) popup.opener = null; } catch { popup = null; }
+      }
+      let request;
+      try { request = await patch({status}); onSaved(request); }
+      catch (error) { closePopup(popup); throw error; }
+      if (!needsEmail) return {request};
+      try {
+        const gmail = await loadGmail();
+        const composeUrl = gmailComposeUrl(gmail.composeUrl);
+        let popupOpened = false;
+        try { if (popup && !popup.closed) { popup.location.replace(composeUrl); popupOpened = true; } }
+        catch { closePopup(popup); }
+        return {request, gmail, composeUrl, popupOpened};
+      } catch (error) {
+        closePopup(popup);
+        return {request, composeError: error};
+      }
+    }, onBusy);
+  }
+}
