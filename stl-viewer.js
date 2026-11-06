@@ -87,12 +87,23 @@ const FRAGMENT_SHADER = `
   }
 `;
 
+export function viewerBackdrop(color, {autoContrast = false, dark = false} = {}) {
+  if (!autoContrast) return {background:dark ? [.094, .157, .227] : [.91, .933, .953],grid:dark ? [.25, .34, .44] : [.64, .71, .77]};
+  const linear = [0, 1, 2].map(index => {
+    const value = Math.max(0, Math.min(1, Number(color?.[index]) || 0));
+    return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+  });
+  const lightModel = linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722 > .45;
+  return {background:lightModel ? [.12, .12, .12] : [.94, .94, .94],grid:lightModel ? [.3, .3, .3] : [.7, .7, .7]};
+}
+
 /** A dependency-free STL viewer. Parser dimensions remain in the STL's own units. */
 export class STLViewer {
-  constructor(canvas, { onUnavailable, onZoomChange, enableZoom = false } = {}) {
+  constructor(canvas, { onUnavailable, onZoomChange, enableZoom = false, autoContrast = false } = {}) {
     this.canvas = canvas;
     this.onUnavailable = typeof onUnavailable === 'function' ? onUnavailable : () => {};
     this.onZoomChange = typeof onZoomChange === 'function' ? onZoomChange : () => {};
+    this.autoContrast = autoContrast === true;
     this.available = false;
     this.disposed = false;
     this.geometry = null;
@@ -291,7 +302,7 @@ export class STLViewer {
   draw() {
     if (!this.available || this.disposed || !this.canvas.width || !this.canvas.height) return;
     const gl = this.gl, dark = !!this.media?.matches;
-    const background = dark ? [.094, .157, .227] : [.91, .933, .953];
+    const {background, grid} = viewerBackdrop(this.color, {autoContrast:this.autoContrast,dark});
     gl.clearColor(...background, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
@@ -308,7 +319,7 @@ export class STLViewer {
       gl.vertexAttribPointer(this.attributes.normal, 3, gl.FLOAT, false, 24, 12);
     };
     bind(this.gridBuffer);
-    gl.uniform3f(this.uniforms.color, ...(dark ? [.25, .34, .44] : [.64, .71, .77]));
+    gl.uniform3f(this.uniforms.color, ...grid);
     gl.drawArrays(gl.LINES, 0, this.gridCount);
     if (this.meshCount) {
       bind(this.meshBuffer);

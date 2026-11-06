@@ -1,8 +1,8 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261106-preview';
-import { SITE_CONFIG } from './site-config.js?v=20261106-preview';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261106-preview';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261106-preview';
-import { STATUSES, COMPLETION_HOURS, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, publicQueueRecords, WorkflowActions } from './workflow.js?v=20261106-preview';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261106-preview2';
+import { SITE_CONFIG } from './site-config.js?v=20261106-preview2';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261106-preview2';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261106-preview2';
+import { STATUSES, COMPLETION_HOURS, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, publicQueueRecords, WorkflowActions } from './workflow.js?v=20261106-preview2';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
