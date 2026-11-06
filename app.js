@@ -1,8 +1,8 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261106-workflow';
-import { SITE_CONFIG } from './site-config.js?v=20261106-workflow';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261106-workflow';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261106-workflow';
-import { STATUSES, COMPLETION_HOURS, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, publicQueueRecords, WorkflowActions } from './workflow.js?v=20261106-workflow';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261106-preview';
+import { SITE_CONFIG } from './site-config.js?v=20261106-preview';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261106-preview';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261106-preview';
+import { STATUSES, COMPLETION_HOURS, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, publicQueueRecords, WorkflowActions } from './workflow.js?v=20261106-preview';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -447,6 +447,7 @@ async function navigate() {
   if (staffRedirect) { location.assign(staffRedirect); return; }
   const normalizedRoute = route === 'staff' ? 'admin' : route;
   page = ['submit', 'status', 'queue', 'admin'].includes(normalizedRoute) ? normalizedRoute : 'submit';
+  if (page !== 'admin') staffController?.leave();
   $$('[data-page]').forEach(section => { section.hidden = section.dataset.page !== page; });
   $$('[data-nav]').forEach(link => { if (link.dataset.nav === page) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); });
   if (page === 'submit') viewer.resize();

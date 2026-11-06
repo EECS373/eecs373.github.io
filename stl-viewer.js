@@ -62,6 +62,7 @@ const VERTEX_SHADER = `
   uniform float yaw;
   uniform float pitch;
   uniform float aspect;
+  uniform float zoom;
   varying vec3 surfaceNormal;
   vec3 rotate(vec3 p) {
     float c = cos(yaw), s = sin(yaw);
@@ -71,7 +72,7 @@ const VERTEX_SHADER = `
   }
   void main() {
     vec3 p = rotate(position);
-    float fit = .96 * min(aspect, 1.0);
+    float fit = .96 * zoom * min(aspect, 1.0);
     gl_Position = vec4(p.x*fit/aspect, p.y*fit, -p.z*.25, 1.0);
     surfaceNormal = rotate(normal);
   }
@@ -88,9 +89,10 @@ const FRAGMENT_SHADER = `
 
 /** A dependency-free STL viewer. Parser dimensions remain in the STL's own units. */
 export class STLViewer {
-  constructor(canvas, { onUnavailable } = {}) {
+  constructor(canvas, { onUnavailable, onZoomChange, enableZoom = false } = {}) {
     this.canvas = canvas;
     this.onUnavailable = typeof onUnavailable === 'function' ? onUnavailable : () => {};
+    this.onZoomChange = typeof onZoomChange === 'function' ? onZoomChange : () => {};
     this.available = false;
     this.disposed = false;
     this.geometry = null;
@@ -98,6 +100,7 @@ export class STLViewer {
     this.color = [.58, .64, .69];
     this.yaw = -.49;
     this.pitch = -.37;
+    this.zoom = 1;
     this.listeners = [];
     this.media = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
     this._themeChange = () => this.draw();
@@ -132,6 +135,11 @@ export class STLViewer {
     this._listen('pointerup', endDrag);
     this._listen('pointercancel', endDrag);
     this._listen('lostpointercapture', endDrag);
+    if (enableZoom) this._listen('wheel', event => {
+      if (!this.available || !this.geometry || !event.deltaY) return;
+      event.preventDefault();
+      this.zoomBy(Math.exp(-Math.sign(event.deltaY) * .12));
+    }, {passive:false});
     this.originalTouchAction = canvas.style.touchAction;
     canvas.style.touchAction = 'none';
     if (typeof globalThis.ResizeObserver === 'function') {
@@ -141,9 +149,9 @@ export class STLViewer {
     this.resize();
   }
 
-  _listen(type, listener) {
-    this.canvas.addEventListener(type, listener);
-    this.listeners.push([type, listener]);
+  _listen(type, listener, options) {
+    this.canvas.addEventListener(type, listener, options);
+    this.listeners.push([type, listener, options]);
   }
 
   _initialize() {
@@ -179,7 +187,7 @@ export class STLViewer {
     this.gridBuffer = gl.createBuffer();
     if (!this.meshBuffer || !this.gridBuffer) throw new Error('Could not start the 3D preview.');
     this.attributes = { position: gl.getAttribLocation(program, 'position'), normal: gl.getAttribLocation(program, 'normal') };
-    this.uniforms = Object.fromEntries(['yaw', 'pitch', 'aspect', 'color'].map(name => [name, gl.getUniformLocation(program, name)]));
+    this.uniforms = Object.fromEntries(['yaw', 'pitch', 'aspect', 'zoom', 'color'].map(name => [name, gl.getUniformLocation(program, name)]));
     this._setGrid(-.72);
   }
 
@@ -198,7 +206,10 @@ export class STLViewer {
   setModel(geometry) {
     this.geometry = geometry;
     this.meshCount = 0;
-    if (!geometry) { this._setGrid(-.72); this.draw(); return this; }
+    if (!geometry) {
+      if (this.available && this.meshBuffer) { this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.meshBuffer); this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(0), this.gl.STATIC_DRAW); }
+      this._setGrid(-.72); this.draw(); return this;
+    }
     const raw = geometry.positions;
     if (!(raw instanceof Float32Array) || !raw.length || raw.length % 9 !== 0) throw new Error('Could not preview this STL geometry.');
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
@@ -254,7 +265,16 @@ export class STLViewer {
     return this;
   }
 
-  reset() { this.yaw = -.49; this.pitch = -.37; this.draw(); return this; }
+  setZoom(value) {
+    if (Number.isFinite(Number(value))) this.zoom = Math.max(.5, Math.min(3, Number(value)));
+    this.onZoomChange(this.zoom);
+    this.draw();
+    return this;
+  }
+
+  zoomBy(factor) { return this.setZoom(this.zoom * Number(factor)); }
+
+  reset() { this.yaw = -.49; this.pitch = -.37; this.zoom = 1; this.onZoomChange(this.zoom); this.draw(); return this; }
 
   resize() {
     if (this.disposed) return;
@@ -279,6 +299,7 @@ export class STLViewer {
     gl.uniform1f(this.uniforms.yaw, this.yaw);
     gl.uniform1f(this.uniforms.pitch, this.pitch);
     gl.uniform1f(this.uniforms.aspect, this.canvas.width / this.canvas.height);
+    gl.uniform1f(this.uniforms.zoom, this.zoom);
     const bind = buffer => {
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.enableVertexAttribArray(this.attributes.position);
@@ -310,9 +331,12 @@ export class STLViewer {
     this.available = false;
     this.observer?.disconnect();
     this.media?.removeEventListener('change', this._themeChange);
-    for (const [type, listener] of this.listeners) this.canvas.removeEventListener(type, listener);
+    for (const [type, listener, options] of this.listeners) this.canvas.removeEventListener(type, listener, options);
+    this.listeners = [];
+    if (this.drag) { try { this.canvas.releasePointerCapture(this.drag.id); } catch { /* Pointer may already have ended. */ } this.drag = null; }
     this.canvas.style.touchAction = this.originalTouchAction;
     this._releaseGL();
     this.geometry = null;
+    this.meshCount = 0;
   }
 }
