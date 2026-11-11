@@ -1,8 +1,8 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261106-preview2';
-import { SITE_CONFIG } from './site-config.js?v=20261106-preview2';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261106-preview2';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261106-preview2';
-import { STATUSES, COMPLETION_HOURS, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, publicQueueRecords, WorkflowActions } from './workflow.js?v=20261106-preview2';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261111-tracker';
+import { SITE_CONFIG } from './site-config.js?v=20261111-tracker';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261111-tracker';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261111-tracker';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261111-tracker';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -25,6 +25,8 @@ let cooldownTimer = null;
 let lastReceipt = null;
 let statusEmail = '';
 let statusRequestSequence = 0;
+let statusSnapshot = null;
+let queueSnapshot = null;
 let page = 'submit';
 let csrfToken = '';
 let authenticated = false;
@@ -53,9 +55,10 @@ const createId = () => {
 
 function setMessage(target, text = '', error = false) {
   const element = typeof target === 'string' ? $(target) : target;
-  element.textContent = text;
+  if (element.textContent !== text) element.textContent = text;
   element.classList.toggle('error', error);
-  element.setAttribute('role', error ? 'alert' : 'status');
+  const role = error ? 'alert' : 'status';
+  if (element.getAttribute('role') !== role) element.setAttribute('role', role);
 }
 
 function globalMessage(text = '') {
@@ -114,6 +117,74 @@ function formatDeadline(value) {
 
 function completionText(request) {
   return request.estimatedCompletionAt ? formatDate(request.estimatedCompletionAt, {year: 'numeric', timeZoneName: 'short'}) : 'Not set';
+}
+
+const timedTrackers = new WeakMap();
+const trackerTimingText = {
+  estimated: 'Time estimate',
+  passed: 'Estimate passed. Awaiting staff update.',
+  unavailable: 'Time estimate unavailable',
+};
+
+function updateTrackerFill(tracker, entry, progress) {
+  entry.fill.style.setProperty('--stage-fill', progress.fill);
+  const text = progress.pickup || trackerTimingText[progress.timing] || '';
+  if (entry.note.textContent !== text) entry.note.textContent = text;
+  tracker.toggleAttribute('data-timed-tracker', progress.ticking);
+}
+
+function renderProgressTracker(request, compact = false) {
+  const progress = requestProgress(request);
+  if (!progress) return document.createDocumentFragment();
+  const tracker = document.createElement('div');
+  tracker.className = compact ? 'request-tracker tracker-compact' : 'request-tracker';
+  const steps = document.createElement('ol');
+  steps.className = 'tracker-steps';
+  steps.setAttribute('role', 'list');
+  steps.setAttribute('aria-label', 'Print request progress');
+  const note = document.createElement('p');
+  note.className = 'tracker-note';
+  let currentFill;
+
+  PROGRESS_STAGES.forEach((label, index) => {
+    const current = index === progress.stage;
+    const complete = index < progress.stage || (current && Boolean(progress.pickup));
+    const step = document.createElement('li');
+    step.className = 'tracker-step';
+    if (current) step.setAttribute('aria-current', 'step');
+    if (complete) step.classList.add('tracker-step-complete');
+    const segment = document.createElement('span');
+    segment.className = 'tracker-segment';
+    segment.setAttribute('aria-hidden', 'true');
+    const fill = document.createElement('span');
+    fill.className = 'tracker-fill';
+    segment.append(fill);
+    const caption = document.createElement('span');
+    caption.className = 'tracker-label';
+    caption.textContent = label;
+    step.append(segment, caption);
+    steps.append(step);
+    if (current) currentFill = fill;
+  });
+
+  tracker.append(steps, note);
+  const entry = {
+    fill: currentFill,
+    note,
+    request: {status: request.status, stageStartedAt: request.stageStartedAt, estimatedCompletionAt: request.estimatedCompletionAt},
+  };
+  timedTrackers.set(tracker, entry);
+  updateTrackerFill(tracker, entry, progress);
+  return tracker;
+}
+
+function updateVisibleTrackers() {
+  if (document.hidden || page === 'submit') return;
+  const now = Date.now();
+  for (const tracker of $$(`[data-page="${page}"] [data-timed-tracker]`)) {
+    const entry = timedTrackers.get(tracker);
+    if (entry) updateTrackerFill(tracker, entry, requestProgress(entry.request, now));
+  }
 }
 
 function formatHours(value) {
@@ -387,42 +458,75 @@ $('#view-submitted-status').addEventListener('click', () => { if (!lastReceipt) 
 $('#new-request').addEventListener('click', () => { $('#submission-success').hidden = true; $('#submission-form').hidden = false; $('#review-button').disabled = !configReady; setMessage('#submission-message'); });
 
 async function lookupStatus(email = $('#status-email').value) {
-  const sequence = ++statusRequestSequence;
   const normalized = email.trim();
-  $('#status-results').replaceChildren();
-  if (!allowedEmail(normalized)) { statusEmail = ''; setMessage('#status-message', 'Use an @umich.edu email address.', true); return; }
+  const submit = $('#status-form button');
+  if (submit.disabled && normalized === statusEmail) return;
+  const sequence = ++statusRequestSequence;
+  if (normalized !== statusEmail) {
+    statusSnapshot = null;
+    $('#status-results').replaceChildren();
+  }
+  if (!allowedEmail(normalized)) {
+    statusEmail = '';
+    submit.disabled = false;
+    setMessage('#status-message', 'Use an @umich.edu email address.', true);
+    return;
+  }
   statusEmail = normalized;
-  const submit = $('#status-form button'); submit.disabled = true;
-  setMessage('#status-message', 'Loading…');
+  submit.disabled = true;
+  if (statusSnapshot === null) setMessage('#status-message', 'Loading…');
   try {
     const result = await api('status', { method: 'POST', body: { email: normalized } });
     if (sequence !== statusRequestSequence) return;
     const requests = Array.isArray(result.requests) ? result.requests : [];
-    setMessage('#status-message', requests.length ? `${requests.length} request(s)` : 'No requests found.');
+    setMessage('#status-message', requests.length ? `${requests.length} request${requests.length === 1 ? '' : 's'}` : 'No requests found.');
+    const snapshot = JSON.stringify(requests);
+    if (snapshot === statusSnapshot) return;
+    const cards = document.createDocumentFragment();
     for (const request of requests) {
       const card = document.createElement('section'); card.className = 'status-card';
       const header = document.createElement('header'); const id = document.createElement('h2'); id.textContent = request.requestNumber;
       const badge = document.createElement('span'); badge.className = 'status-badge'; badge.textContent = request.status;
       const details = document.createElement('dl'); details.className = 'details-list';
-      appendDetails(details, [['Queue position', request.queuePosition ? `#${request.queuePosition}` : '—'], ['Estimated completion', completionText(request)], ['Last update', formatDate(request.updatedAt)]]);
-      header.append(id, badge); card.append(header, details); $('#status-results').append(card);
+      const facts = [['Queue position', request.queuePosition ? `#${request.queuePosition}` : '—'], ['Estimated completion', completionText(request)]];
+      if (request.stageStartedAt) facts.push(['Stage started', formatDate(request.stageStartedAt, {timeZoneName:'short'})]);
+      facts.push(['Last update', formatDate(request.updatedAt)]);
+      appendDetails(details, facts);
+      header.append(id, badge);
+      card.append(header, renderProgressTracker(request), details);
+      cards.append(card);
     }
-  } catch (error) { if (sequence === statusRequestSequence) setMessage('#status-message', error.message, true); }
-  finally { if (sequence === statusRequestSequence) submit.disabled = false; }
+    $('#status-results').replaceChildren(cards);
+    statusSnapshot = snapshot;
+  } catch (error) {
+    if (sequence === statusRequestSequence) setMessage('#status-message', statusSnapshot === null ? error.message : 'Could not refresh. Showing the last update.', true);
+  } finally {
+    if (sequence === statusRequestSequence) submit.disabled = false;
+  }
 }
 
 $('#status-form').addEventListener('submit', event => { event.preventDefault(); lookupStatus(); });
-$('#status-email').addEventListener('input', () => { statusRequestSequence++; statusEmail = ''; $('#status-results').replaceChildren(); $('#status-form button').disabled = false; setMessage('#status-message'); });
+$('#status-email').addEventListener('input', () => {
+  statusRequestSequence++;
+  statusEmail = '';
+  statusSnapshot = null;
+  $('#status-results').replaceChildren();
+  $('#status-form button').disabled = false;
+  setMessage('#status-message');
+});
 
 async function loadPublicQueue() {
   if (publicQueueLoading) return;
   publicQueueLoading = true;
   $('#refresh-queue').disabled = true;
-  setMessage('#queue-message', 'Loading…');
+  if (queueSnapshot === null) setMessage('#queue-message', 'Loading…');
   try {
     const result = await api('queue');
-    $('#public-queue').replaceChildren();
     const requests = publicQueueRecords(result.requests || []);
+    setMessage('#queue-message', requests.length ? '' : 'No requests in the queue.');
+    const snapshot = JSON.stringify(requests);
+    if (snapshot === queueSnapshot) return;
+    const rows = document.createDocumentFragment();
     for (const request of requests) {
       const row = document.createElement('div'); row.className = 'public-row';
       const rank = document.createElement('span'); rank.className = 'queue-rank'; rank.textContent = request.queuePosition ? `#${request.queuePosition}` : '—';
@@ -433,11 +537,17 @@ async function loadPublicQueue() {
       const label = document.createElement('small'); label.textContent = 'Estimated completion';
       const eta = document.createElement('span'); eta.textContent = completionText(request); timing.append(label, eta);
       if (request.completedAt) { const completed = document.createElement('small'); completed.textContent = `Completed: ${formatDate(request.completedAt, {timeZoneName:'short'})}`; timing.append(completed); }
-      row.append(rank, title, material, timing); $('#public-queue').append(row);
+      row.append(rank, title, material, timing, renderProgressTracker(request, true));
+      rows.append(row);
     }
-    setMessage('#queue-message', requests.length ? '' : 'No requests in the queue.');
-  } catch (error) { setMessage('#queue-message', error.message, true); }
-  finally { publicQueueLoading = false; $('#refresh-queue').disabled = false; }
+    $('#public-queue').replaceChildren(rows);
+    queueSnapshot = snapshot;
+  } catch (error) {
+    setMessage('#queue-message', queueSnapshot === null ? error.message : 'Could not refresh. Showing the last update.', true);
+  } finally {
+    publicQueueLoading = false;
+    $('#refresh-queue').disabled = false;
+  }
 }
 $('#refresh-queue').addEventListener('click', loadPublicQueue);
 
@@ -450,6 +560,7 @@ async function navigate() {
   if (page !== 'admin') staffController?.leave();
   $$('[data-page]').forEach(section => { section.hidden = section.dataset.page !== page; });
   $$('[data-nav]').forEach(link => { if (link.dataset.nav === page) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); });
+  updateVisibleTrackers();
   if (page === 'submit') viewer.resize();
   if (page === 'queue') await loadPublicQueue();
   if (page === 'admin' && staffController) { await staffController.checkSession(); if (staffController.isAuthenticated()) await Promise.all([staffController.loadAdminRequests({ preserveEditor: editorDirty }), staffController.loadSettings()]); }
@@ -469,5 +580,7 @@ async function initialize() {
 
 window.addEventListener('hashchange', navigate);
 window.addEventListener('beforeunload', event => { if (submitting) { event.preventDefault(); event.returnValue = ''; } });
+document.addEventListener('visibilitychange', updateVisibleTrackers);
+setInterval(updateVisibleTrackers, 1000);
 setInterval(() => { if (document.hidden) return; if (page === 'queue') loadPublicQueue(); else if (page === 'status' && statusEmail) lookupStatus(statusEmail); }, 30000);
 initialize();

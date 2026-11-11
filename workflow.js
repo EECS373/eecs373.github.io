@@ -1,6 +1,12 @@
 export const STATUSES = Object.freeze(['Submitted', 'Queued', 'In progress', 'On printer', 'In EECS 2334']);
 export const COMPLETION_HOURS = Object.freeze([1, 2, 3, 6, 12, 18, 24]);
 export const COMPLETED_STATUSES = Object.freeze(['On printer', 'In EECS 2334']);
+export const PROGRESS_STAGES = Object.freeze([...STATUSES.slice(0, 3), 'Ready for pickup']);
+const MAX_ESTIMATED_FILL = 0.95;
+const pickupLocations = {
+  'On printer': 'On the printer in EECS 2322',
+  'In EECS 2334': 'On the instructor tables in EECS 2334',
+};
 const zone = 'America/Detroit';
 const wallClock = new Intl.DateTimeFormat('en-CA', {timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
 
@@ -40,10 +46,30 @@ export function isCurrentRequest(request, now = Date.now()) {
   return !Number.isFinite(completed) || now - completed < 48 * 3600000;
 }
 
+export function requestProgress(request, now = Date.now()) {
+  const statusIndex = STATUSES.indexOf(request.status);
+  if (statusIndex < 0) return null;
+  const pickup = pickupLocations[request.status];
+  if (pickup) return {stage: 3, fill: 1, pickup, timing: null, ticking: false};
+
+  const start = Date.parse(request.stageStartedAt ?? '');
+  const eta = Date.parse(request.estimatedCompletionAt ?? '');
+  const hasWindow = Number.isFinite(start) && Number.isFinite(eta) && eta > start;
+  const pastEstimate = Number.isFinite(eta) && now >= eta;
+  const fill = hasWindow ? Math.min(MAX_ESTIMATED_FILL, Math.max(0, (now - start) / (eta - start))) : 0;
+  return {
+    stage: statusIndex,
+    fill,
+    pickup: null,
+    timing: pastEstimate ? 'passed' : hasWindow ? 'estimated' : 'unavailable',
+    ticking: Number.isFinite(eta) && !pastEstimate,
+  };
+}
+
 export function publicQueueRecords(requests, now = Date.now()) {
   return requests.filter(request => STATUSES.includes(request.status) && isCurrentRequest(request, now)).map(request => ({
     requestNumber: request.requestNumber, status: request.status,
-    queuePosition: request.queuePosition, estimatedCompletionAt: request.estimatedCompletionAt,
+    queuePosition: request.queuePosition, estimatedCompletionAt: request.estimatedCompletionAt, stageStartedAt: request.stageStartedAt,
     completedAt: request.completedAt, materialSummary: request.materialSummary, colorSummary: request.colorSummary,
   }));
 }
