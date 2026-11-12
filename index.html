@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#00274c">
   <meta name="description" content="EECS 373/473 3D print requests and queue.">
   <title>EECS 373/473 3D Print Request</title>
-  <link rel="stylesheet" href="./styles.css?v=20261112-queue-display">
+  <link rel="stylesheet" href="./styles.css?v=20261112-cursor">
   <script type="module" src="./app.js?v=20261112-queue-display"></script>
 </head>
 <body>
@@ -29,7 +29,7 @@
               <div class="section-heading"><h2>Parts</h2><span>10 STL files max · 10 MB each</span></div>
               <div class="drop-zone" id="drop-zone"><label for="files"><strong>Add STL files</strong><input id="files" type="file" accept=".stl" multiple aria-describedby="upload-limits"></label><span id="upload-limits" class="muted">Choose files or drop them here</span></div>
               <div id="file-list" class="file-list" aria-label="Parts to print"></div>
-              <div id="empty-parts" class="empty-state">Add an STL to preview it.</div>
+              <div id="empty-parts" class="empty-state">Add an STL to choose material and color.</div>
               <div id="preview-panel" hidden>
                 <div class="viewer"><div class="viewer-toolbar"><span class="tag">3D preview</span><button id="reset-view" type="button" class="button plain">Reset view</button></div><canvas id="model-canvas" aria-label="3D preview of the selected part. Drag to orbit, or use the rotation slider."></canvas><div class="viewer-caption"><span id="preview-filename"></span><span>Drag to orbit</span></div></div>
                 <p id="preview-unavailable" class="muted" hidden></p>
