@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#00274c">
   <meta name="description" content="EECS 373/473 3D print requests and queue.">
   <title>EECS 373/473 3D Print Request</title>
-  <link rel="stylesheet" href="./styles.css?v=20261112-parts">
-  <script type="module" src="./app.js?v=20261112-parts"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261112-queue-display">
+  <script type="module" src="./app.js?v=20261112-queue-display"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -46,11 +46,31 @@
               <label class="field" for="group-name">Group number and name *<input id="group-name" required maxlength="160" autocomplete="off"></label>
               <fieldset id="part-settings" class="part-settings" disabled>
                 <legend id="part-name">Part settings</legend>
-                <fieldset class="material-fieldset"><legend>Material</legend><div class="materials"><label><input type="radio" name="material" value="PLA" checked> PLA</label><label><input type="radio" name="material" value="PETG"> PETG</label></div></fieldset>
+                <fieldset class="material-fieldset">
+                  <legend>Material</legend>
+                  <div class="materials">
+                    <label><input type="radio" name="material" value="PLA" checked> PLA</label>
+                    <label><input type="radio" name="material" value="PETG"> PETG</label>
+                    <label><input type="radio" name="material" value="No preference"> No preference</label>
+                  </div>
+                </fieldset>
                 <label class="field" for="first-color">First color preference *<input id="first-color" required maxlength="100" value="White" list="colors"></label>
                 <datalist id="colors"></datalist><div id="swatches" class="swatches" aria-label="First color choices"></div>
-                <label for="custom-color" class="custom-color">Custom color<input id="custom-color" type="color" value="#e7e5d4"></label>
-                <div class="field-pair"><label class="field" for="second-color">Second color preference<input id="second-color" maxlength="100" list="colors" placeholder="Optional"></label><label class="field" for="backup-color">Backup color preference *<select id="backup-color" required><option value="White">White</option><option value="Black">Black</option><option value="Grey" selected>Grey</option></select></label></div>
+                <div class="color-actions">
+                  <label for="custom-color" class="custom-color">Custom color<input id="custom-color" type="color" value="#e7e5d4"></label>
+                  <button id="no-color-preference" type="button" class="button secondary" aria-pressed="false">No color preference</button>
+                </div>
+                <div id="alternate-colors" class="field-pair">
+                  <label class="field" for="second-color">Second color preference<input id="second-color" maxlength="100" list="colors" placeholder="Optional"></label>
+                  <label class="field" for="backup-color">Backup color preference *
+                    <select id="backup-color" required>
+                      <option value="White">White</option>
+                      <option value="Black">Black</option>
+                      <option value="Grey" selected>Grey</option>
+                      <option value="No preference">No preference</option>
+                    </select>
+                  </label>
+                </div>
               </fieldset>
               <label class="field" for="needed-by">Needed by?<input id="needed-by" type="date"></label>
               <label class="field" for="instructions">Special instructions<textarea id="instructions" rows="3" maxlength="5000"></textarea></label>

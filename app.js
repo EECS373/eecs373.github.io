@@ -1,13 +1,14 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261112-parts';
-import { SITE_CONFIG } from './site-config.js?v=20261112-parts';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-parts';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-parts';
-import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261112-parts';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261112-queue-display';
+import { SITE_CONFIG } from './site-config.js?v=20261112-queue-display';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-queue-display';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-queue-display';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261112-queue-display';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const MAX_FILES = 10;
 const MAX_BYTES = 10 * 1024 * 1024;
+const NO_PREFERENCE = 'No preference';
 const defaultOptions = { material: 'PLA', firstColor: 'White', secondColor: '', backupColor: 'Grey', unit: 'mm' };
 const fallbackColors = {White:'#e7e5d4',Ivory:'#eee0bc',Cream:'#f1d6a3',Yellow:'#f4d035',Orange:'#eb8a32',Red:'#d84d48',Coral:'#ec8673',Pink:'#e9a1bd',Magenta:'#c44a95',Purple:'#855ab1',Lavender:'#b8a2d3',Blue:'#5e89c9','Light blue':'#9bc5e8',Navy:'#304665',Cyan:'#54bdcf',Teal:'#47958f',Green:'#519365',Lime:'#a6be53',Olive:'#87904d',Brown:'#946844',Tan:'#c1a184',Grey:'#94a2af','Dark grey':'#5e6978',Black:'#343b47',Silver:'#bfc8d2',Gold:'#cba44f',Bronze:'#a97b53',Clear:'#dce8ed'};
 let colors = fallbackColors;
@@ -42,7 +43,16 @@ let staffController = null;
 const runtime = resolveRuntimeConfig(SITE_CONFIG, document.baseURI);
 const apiUrl = path => endpointUrl(path, runtime);
 const allowedEmail = value => /^[^\s@]+@umich\.edu$/i.test(value.trim());
-const optionsOf = part => ({ material: part.material, firstColor: part.firstColor, secondColor: part.secondColor, backupColor: part.backupColor, unit: part.unit });
+function optionsOf(part) {
+  const anyColor = part.firstColor === NO_PREFERENCE;
+  return {
+    material: part.material,
+    firstColor: part.firstColor,
+    secondColor: anyColor ? '' : part.secondColor,
+    backupColor: anyColor ? NO_PREFERENCE : part.backupColor,
+    unit: part.unit,
+  };
+}
 const selectedPart = () => parts.find(part => part.id === selectedPartId);
 const createId = () => {
   if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
@@ -193,7 +203,13 @@ function formatHours(value) {
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} m`;
 }
 
+function normalizeColorPreference(value) {
+  const trimmed = value.trim();
+  return trimmed.toLowerCase() === NO_PREFERENCE.toLowerCase() ? NO_PREFERENCE : trimmed;
+}
+
 function colorHex(value) {
+  if (value === NO_PREFERENCE) return fallbackColors.Grey;
   if (/^#[a-f\d]{6}$/i.test(value)) return value;
   const name = Object.keys(colors).find(name => name.toLowerCase() === String(value).toLowerCase());
   return colors[name] || colors.Grey || '#94a2af';
@@ -210,6 +226,7 @@ function populateColors() {
   $('#colors').replaceChildren();
   $('#swatches').replaceChildren();
   for (const [name, hex] of Object.entries(colors)) {
+    if (normalizeColorPreference(name) === NO_PREFERENCE) continue;
     const option = document.createElement('option');
     option.value = name;
     $('#colors').append(option);
@@ -223,18 +240,28 @@ function populateColors() {
     button.addEventListener('click', () => { $('#first-color').value = name; savePartOptions(); });
     $('#swatches').append(button);
   }
+  const option = document.createElement('option');
+  option.value = NO_PREFERENCE;
+  $('#colors').append(option);
 }
 
 function updateColorSelection() {
   const part = selectedPart();
   const value = part?.firstColor || '';
+  const anyColor = value === NO_PREFERENCE;
+  $('#no-color-preference')?.setAttribute('aria-pressed', String(anyColor));
+  const alternateColors = $('#alternate-colors') || $('#second-color').closest('.field-pair');
+  if (alternateColors) alternateColors.hidden = anyColor;
+  $('#second-color').disabled = anyColor;
+  $('#backup-color').disabled = anyColor;
   $$('#swatches button').forEach(button => {
     const selected = button.dataset.color.toLowerCase() === value.toLowerCase();
     button.classList.toggle('selected', selected);
     button.setAttribute('aria-pressed', String(selected));
   });
-  $('#custom-color').value = colorHex(value);
-  viewer.setColor(colorHex(value));
+  const hex = colorHex(value);
+  $('#custom-color').value = hex;
+  viewer.setColor(hex);
 }
 
 function updateDimensions() {
@@ -303,8 +330,8 @@ function savePartOptions() {
   const part = selectedPart();
   if (!part) return;
   part.material = $('input[name=material]:checked').value;
-  part.firstColor = $('#first-color').value.trim();
-  part.secondColor = $('#second-color').value.trim();
+  part.firstColor = normalizeColorPreference($('#first-color').value);
+  part.secondColor = normalizeColorPreference($('#second-color').value);
   part.backupColor = $('#backup-color').value.trim();
   part.unit = $('#unit').value;
   lastOptions = { material: part.material, firstColor: part.firstColor || lastOptions.firstColor, secondColor: part.secondColor, backupColor: part.backupColor || lastOptions.backupColor, unit: part.unit };
@@ -348,6 +375,10 @@ $$('input[name=material]').forEach(input => input.addEventListener('change', sav
 for (const id of ['first-color', 'second-color']) $(`#${id}`).addEventListener('input', savePartOptions);
 $('#backup-color').addEventListener('change', savePartOptions);
 $('#custom-color').addEventListener('input', event => { $('#first-color').value = event.target.value; savePartOptions(); });
+$('#no-color-preference')?.addEventListener('click', () => {
+  $('#first-color').value = NO_PREFERENCE;
+  savePartOptions();
+});
 $('#unit').addEventListener('change', savePartOptions);
 $('#rotation').addEventListener('input', event => viewer.setYaw(Number(event.target.value)));
 $('#reset-view').addEventListener('click', () => { viewer.reset(); $('#rotation').value = '-28'; });
@@ -357,8 +388,9 @@ function validateParts() {
   if (!parts.length) throw new Error('Add at least one STL file.');
   for (const part of parts) {
     if (!Number.isInteger(part.quantity) || part.quantity < 1 || part.quantity > 999) throw new Error(`Enter a whole quantity from 1 to 999 for ${part.file.name}.`);
-    if (!part.firstColor || !part.backupColor) { selectedPartId = part.id; renderFiles(); renderPartEditor(); throw new Error(`Choose first and backup colors for ${part.file.name}.`); }
-    if ([part.firstColor, part.secondColor, part.backupColor].some(value => value.length > 100)) throw new Error('Color preferences must be 100 characters or fewer.');
+    const { firstColor, secondColor, backupColor } = optionsOf(part);
+    if (!firstColor || !backupColor) { selectedPartId = part.id; renderFiles(); renderPartEditor(); throw new Error(`Choose first and backup colors for ${part.file.name}.`); }
+    if ([firstColor, secondColor, backupColor].some(value => value.length > 100)) throw new Error('Color preferences must be 100 characters or fewer.');
   }
 }
 
@@ -382,7 +414,11 @@ $('#submission-form').addEventListener('submit', event => {
     for (const part of reviewed.parts) {
       const item = document.createElement('li'); item.className = 'review-part';
       const title = document.createElement('strong'); title.textContent = `${part.file.name} × ${part.quantity}`;
-      const material = document.createElement('p'); material.textContent = `${part.material} · First: ${part.firstColor} · Second: ${part.secondColor || '—'} · Backup: ${part.backupColor}`;
+      const material = document.createElement('p');
+      const colorText = part.firstColor === NO_PREFERENCE
+        ? `Color: ${NO_PREFERENCE}`
+        : `First: ${part.firstColor} · Second: ${part.secondColor || '—'} · Backup: ${part.backupColor}`;
+      material.textContent = `Material: ${part.material} · ${colorText}`;
       const unit = document.createElement('p'); unit.textContent = `STL units: ${part.unit === 'inch' ? 'inches' : 'millimeters'}`;
       item.append(title, material, unit); $('#review-parts').append(item);
     }
@@ -486,7 +522,10 @@ async function lookupStatus(email = $('#status-email').value) {
     for (const request of requests) {
       const card = document.createElement('section'); card.className = 'status-card';
       const header = document.createElement('header'); const id = document.createElement('h2'); id.textContent = request.requestNumber;
-      const badge = document.createElement('span'); badge.className = 'status-badge'; badge.textContent = request.status;
+      const badge = document.createElement('span');
+      badge.className = 'status-badge';
+      badge.dataset.status = request.status;
+      badge.textContent = request.status;
       const details = document.createElement('dl'); details.className = 'details-list';
       const facts = [['Queue position', request.queuePosition ? `#${request.queuePosition}` : '—'], ['Estimated completion', completionText(request)]];
       const partProgress = partProgressCounts(request.partProgress);
@@ -525,9 +564,12 @@ function renderQueueRow(request) {
   rank.textContent = request.queuePosition ? `#${request.queuePosition}` : '—';
 
   const title = document.createElement('div');
+  title.className = 'queue-title';
   const number = document.createElement('strong');
   number.textContent = request.requestNumber;
-  const status = document.createElement('small');
+  const status = document.createElement('span');
+  status.className = 'status-badge queue-status';
+  status.dataset.status = request.status;
   status.textContent = request.status;
   title.append(number, status);
   const partProgress = partProgressCounts(request.partProgress);
@@ -538,7 +580,9 @@ function renderQueueRow(request) {
   }
 
   const material = document.createElement('span');
-  material.textContent = [request.materialSummary, request.colorSummary].filter(Boolean).join(' / ');
+  const materialSummary = request.materialSummary === 'No preference' ? 'Any material' : request.materialSummary;
+  const colorSummary = request.colorSummary === 'No preference' ? 'Any color' : request.colorSummary;
+  material.textContent = [materialSummary, colorSummary].filter(Boolean).join(' / ');
   const timing = document.createElement('div');
   timing.className = 'queue-estimate';
   const label = document.createElement('small');
