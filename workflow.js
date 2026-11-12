@@ -40,6 +40,64 @@ export function completionAfterHours(hours, now = Date.now()) {
   return new Date(now + Number(hours) * 3600000).toISOString();
 }
 
+export class CompletionAutosave {
+  constructor(estimate) {
+    this.saved = estimate;
+    this.pending = null;
+    this.inFlight = null;
+    this.error = '';
+    this.uncertain = false;
+    this.didSave = false;
+  }
+
+  get estimate() { return this.pending ? this.pending.estimate : this.saved; }
+  get ready() { return Boolean(this.pending && !this.inFlight && !this.error); }
+
+  observe(estimate) {
+    if (estimate !== this.saved) this.didSave = false;
+    this.saved = estimate;
+    if (this.ready && !this.uncertain && this.pending.estimate === estimate) this.pending = null;
+  }
+
+  queue(estimate, {custom = false} = {}) {
+    if (this.pending?.estimate === estimate && !this.error) return;
+    this.pending = {estimate, custom};
+    this.error = '';
+    this.didSave = false;
+    this.observe(this.saved);
+  }
+
+  cancelUnsentCustom() {
+    if (this.pending?.custom && this.pending !== this.inFlight && !this.error) {
+      this.pending = this.inFlight;
+    }
+  }
+
+  start() {
+    if (!this.ready) return null;
+    this.inFlight = this.pending;
+    return this.inFlight;
+  }
+
+  succeed(estimate) {
+    if (this.pending === this.inFlight) this.pending = null;
+    this.inFlight = null;
+    this.uncertain = false;
+    this.observe(estimate);
+    this.didSave = !this.pending;
+  }
+
+  fail(message) {
+    // A timeout can happen after commit, so the previous value may need to be saved again.
+    if (!this.inFlight) return;
+    if (this.pending === this.inFlight) this.error = message;
+    this.inFlight = null;
+    this.uncertain = true;
+  }
+
+  retry() { this.error = ''; }
+}
+
 export function isCurrentRequest(request, now = Date.now()) {
   if (!COMPLETED_STATUSES.includes(request.status) || !request.completedAt) return true;
   const completed = new Date(request.completedAt).getTime();
@@ -66,11 +124,18 @@ export function requestProgress(request, now = Date.now()) {
   };
 }
 
+export function partProgressCounts(progress) {
+  if (!progress || !Number.isSafeInteger(progress.total) || progress.total < 2) return null;
+  if (!Number.isSafeInteger(progress.printed) || progress.printed < 0 || progress.printed > progress.total) return null;
+  return {printed: progress.printed, total: progress.total};
+}
+
 export function publicQueueRecords(requests, now = Date.now()) {
   return requests.filter(request => STATUSES.includes(request.status) && isCurrentRequest(request, now)).map(request => ({
     requestNumber: request.requestNumber, status: request.status,
     queuePosition: request.queuePosition, estimatedCompletionAt: request.estimatedCompletionAt, stageStartedAt: request.stageStartedAt,
     completedAt: request.completedAt, materialSummary: request.materialSummary, colorSummary: request.colorSummary,
+    partProgress: partProgressCounts(request.partProgress),
   }));
 }
 

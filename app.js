@@ -1,8 +1,8 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261111-tracker';
-import { SITE_CONFIG } from './site-config.js?v=20261111-tracker';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261111-tracker';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261111-tracker';
-import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261111-tracker';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261112-parts';
+import { SITE_CONFIG } from './site-config.js?v=20261112-parts';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-parts';
+import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-parts';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261112-parts';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -489,6 +489,8 @@ async function lookupStatus(email = $('#status-email').value) {
       const badge = document.createElement('span'); badge.className = 'status-badge'; badge.textContent = request.status;
       const details = document.createElement('dl'); details.className = 'details-list';
       const facts = [['Queue position', request.queuePosition ? `#${request.queuePosition}` : '—'], ['Estimated completion', completionText(request)]];
+      const partProgress = partProgressCounts(request.partProgress);
+      if (partProgress) facts.push(['STL files printed', `${partProgress.printed} of ${partProgress.total}`]);
       if (request.stageStartedAt) facts.push(['Stage started', formatDate(request.stageStartedAt, {timeZoneName:'short'})]);
       facts.push(['Last update', formatDate(request.updatedAt)]);
       appendDetails(details, facts);
@@ -515,6 +517,45 @@ $('#status-email').addEventListener('input', () => {
   setMessage('#status-message');
 });
 
+function renderQueueRow(request) {
+  const row = document.createElement('div');
+  row.className = 'public-row';
+  const rank = document.createElement('span');
+  rank.className = 'queue-rank';
+  rank.textContent = request.queuePosition ? `#${request.queuePosition}` : '—';
+
+  const title = document.createElement('div');
+  const number = document.createElement('strong');
+  number.textContent = request.requestNumber;
+  const status = document.createElement('small');
+  status.textContent = request.status;
+  title.append(number, status);
+  const partProgress = partProgressCounts(request.partProgress);
+  if (partProgress) {
+    const printed = document.createElement('small');
+    printed.textContent = `${partProgress.printed} of ${partProgress.total} STL files printed`;
+    title.append(printed);
+  }
+
+  const material = document.createElement('span');
+  material.textContent = [request.materialSummary, request.colorSummary].filter(Boolean).join(' / ');
+  const timing = document.createElement('div');
+  timing.className = 'queue-estimate';
+  const label = document.createElement('small');
+  label.textContent = 'Estimated completion';
+  const eta = document.createElement('span');
+  eta.className = 'queue-eta-value';
+  eta.textContent = completionText(request);
+  timing.append(label, eta);
+  if (request.completedAt) {
+    const completed = document.createElement('small');
+    completed.textContent = `Completed: ${formatDate(request.completedAt, {timeZoneName:'short'})}`;
+    timing.append(completed);
+  }
+  row.append(rank, title, material, timing, renderProgressTracker(request, true));
+  return row;
+}
+
 async function loadPublicQueue() {
   if (publicQueueLoading) return;
   publicQueueLoading = true;
@@ -527,19 +568,7 @@ async function loadPublicQueue() {
     const snapshot = JSON.stringify(requests);
     if (snapshot === queueSnapshot) return;
     const rows = document.createDocumentFragment();
-    for (const request of requests) {
-      const row = document.createElement('div'); row.className = 'public-row';
-      const rank = document.createElement('span'); rank.className = 'queue-rank'; rank.textContent = request.queuePosition ? `#${request.queuePosition}` : '—';
-      const title = document.createElement('div'); const id = document.createElement('strong'); id.textContent = request.requestNumber;
-      const status = document.createElement('small'); status.textContent = request.status; title.append(id, status);
-      const material = document.createElement('span'); material.textContent = [request.materialSummary, request.colorSummary].filter(Boolean).join(' / ');
-      const timing = document.createElement('div'); timing.className = 'queue-estimate';
-      const label = document.createElement('small'); label.textContent = 'Estimated completion';
-      const eta = document.createElement('span'); eta.textContent = completionText(request); timing.append(label, eta);
-      if (request.completedAt) { const completed = document.createElement('small'); completed.textContent = `Completed: ${formatDate(request.completedAt, {timeZoneName:'short'})}`; timing.append(completed); }
-      row.append(rank, title, material, timing, renderProgressTracker(request, true));
-      rows.append(row);
-    }
+    for (const request of requests) rows.append(renderQueueRow(request));
     $('#public-queue').replaceChildren(rows);
     queueSnapshot = snapshot;
   } catch (error) {
