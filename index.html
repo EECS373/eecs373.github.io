@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#00274c">
   <meta name="description" content="EECS 373/473 3D print requests and queue.">
   <title>EECS 373/473 3D Print Request</title>
-  <link rel="stylesheet" href="./styles.css?v=20261112-cursor">
-  <script type="module" src="./app.js?v=20261112-queue-display"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261112-model-formats">
+  <script type="module" src="./app.js?v=20261112-model-formats"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -26,16 +26,16 @@
         <form id="submission-form">
           <div class="submission-grid">
             <div class="parts-column">
-              <div class="section-heading"><h2>Parts</h2><span>10 STL files max · 10 MB each</span></div>
-              <div class="drop-zone" id="drop-zone"><label for="files"><strong>Add STL files</strong><input id="files" type="file" accept=".stl" multiple aria-describedby="upload-limits"></label><span id="upload-limits" class="muted">Choose files or drop them here</span></div>
+              <div class="section-heading"><h2>Parts</h2><span>10 files max · 10 MB each</span></div>
+              <div class="drop-zone" id="drop-zone"><label for="files"><strong>Add model files</strong><input id="files" type="file" accept=".stl" multiple disabled aria-describedby="upload-limits"></label><span id="upload-limits" class="muted">STL · Choose files or drop them here</span></div>
               <div id="file-list" class="file-list" aria-label="Parts to print"></div>
-              <div id="empty-parts" class="empty-state">Add an STL to choose material and color.</div>
+              <div id="empty-parts" class="empty-state">Add a model to choose material and color.</div>
               <div id="preview-panel" hidden>
-                <div class="viewer"><div class="viewer-toolbar"><span class="tag">3D preview</span><button id="reset-view" type="button" class="button plain">Reset view</button></div><canvas id="model-canvas" aria-label="3D preview of the selected part. Drag to orbit, or use the rotation slider."></canvas><div class="viewer-caption"><span id="preview-filename"></span><span>Drag to orbit</span></div></div>
-                <p id="preview-unavailable" class="muted" hidden></p>
-                <label class="rotation-control" for="rotation">Rotate part<input id="rotation" type="range" min="-180" max="180" value="-28"></label>
-                <div class="dimension-row"><div><span class="eyebrow">Width × depth × height</span><strong id="dimensions">—</strong></div><label for="unit">STL units<select id="unit"><option value="mm">Millimeters</option><option value="inch">Inches</option></select></label></div>
-                <p id="fit-message" class="fit-message" aria-live="polite"></p><p class="muted small">X2D: 256 × 256 × 260 mm · Staff approval required</p>
+                <div id="model-viewer" class="viewer"><div class="viewer-toolbar"><span class="tag">3D preview</span><button id="reset-view" type="button" class="button plain">Reset view</button></div><canvas id="model-canvas" aria-label="3D preview of the selected part. Drag to orbit, or use the rotation slider."></canvas><div class="viewer-caption"><span id="preview-filename"></span><span>Drag to orbit</span></div></div>
+                <p id="preview-unavailable" class="muted small" role="status" hidden></p>
+                <label id="rotation-control" class="rotation-control" for="rotation">Rotate part<input id="rotation" type="range" min="-180" max="180" value="-28"></label>
+                <div id="dimension-row" class="dimension-row"><div id="dimension-values"><span class="eyebrow">Width × depth × height</span><strong id="dimensions">—</strong></div><label id="unit-field" for="unit">Model units<select id="unit"><option value="mm">Millimeters</option><option value="inch">Inches</option></select></label></div>
+                <p id="fit-message" class="fit-message" aria-live="polite"></p><p id="print-volume" class="muted small">X2D: 256 × 256 × 260 mm · Staff approval required</p>
               </div>
             </div>
             <div class="details-column">

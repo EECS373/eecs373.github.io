@@ -1,3 +1,14 @@
+const MODEL_EXTENSIONS = ['.stl', '.3mf', '.obj', '.step', '.stp', '.amf'];
+
+export function acceptedModelExtensions(configured) {
+  const extensions = Array.isArray(configured) ? configured : ['.stl'];
+  return MODEL_EXTENSIONS.filter(extension => extensions.includes(extension));
+}
+
+export function modelExtension(filename) {
+  return (/\.[a-z0-9]+$/i.exec(filename)?.[0] || '').toLowerCase();
+}
+
 // Retry timing and staged upload state. No automatic network retries.
 export function retryDelaySeconds(header, payload = {}, now = Date.now()) {
   const value = String(header ?? '').trim();
@@ -105,3 +116,4 @@ export class StagedRequest {
     } finally { this.running = false; }
   }
 }
+

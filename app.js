@@ -1,8 +1,8 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261112-queue-display';
-import { SITE_CONFIG } from './site-config.js?v=20261112-queue-display';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-queue-display';
-import { responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-queue-display';
-import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261112-queue-display';
+import { parseSTL, STLViewer } from './stl-viewer.js?v=20261112-model-formats';
+import { SITE_CONFIG } from './site-config.js?v=20261112-model-formats';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-model-formats';
+import { acceptedModelExtensions, modelExtension, responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-model-formats';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261112-model-formats';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -12,6 +12,7 @@ const NO_PREFERENCE = 'No preference';
 const defaultOptions = { material: 'PLA', firstColor: 'White', secondColor: '', backupColor: 'Grey', unit: 'mm' };
 const fallbackColors = {White:'#e7e5d4',Ivory:'#eee0bc',Cream:'#f1d6a3',Yellow:'#f4d035',Orange:'#eb8a32',Red:'#d84d48',Coral:'#ec8673',Pink:'#e9a1bd',Magenta:'#c44a95',Purple:'#855ab1',Lavender:'#b8a2d3',Blue:'#5e89c9','Light blue':'#9bc5e8',Navy:'#304665',Cyan:'#54bdcf',Teal:'#47958f',Green:'#519365',Lime:'#a6be53',Olive:'#87904d',Brown:'#946844',Tan:'#c1a184',Grey:'#94a2af','Dark grey':'#5e6978',Black:'#343b47',Silver:'#bfc8d2',Gold:'#cba44f',Bronze:'#a97b53',Clear:'#dce8ed'};
 let colors = fallbackColors;
+let acceptedExtensions = acceptedModelExtensions();
 let configReady = false;
 let parts = [];
 let selectedPartId = null;
@@ -43,6 +44,8 @@ let staffController = null;
 const runtime = resolveRuntimeConfig(SITE_CONFIG, document.baseURI);
 const apiUrl = path => endpointUrl(path, runtime);
 const allowedEmail = value => /^[^\s@]+@umich\.edu$/i.test(value.trim());
+const uploadTypes = () => acceptedExtensions.map(extension => extension === '.3mf' ? 'unsliced 3MF' : extension.slice(1).toUpperCase()).join(', ');
+const unitLabel = unit => unit === 'embedded' ? 'from file' : unit === 'inch' ? 'inches' : 'millimeters';
 function optionsOf(part) {
   const anyColor = part.firstColor === NO_PREFERENCE;
   return {
@@ -215,11 +218,17 @@ function colorHex(value) {
   return colors[name] || colors.Grey || '#94a2af';
 }
 
+function showStudentPreview(visible, message = '') {
+  $('#model-viewer').hidden = !visible;
+  $('#rotation-control').hidden = !visible;
+  $('#preview-unavailable').textContent = message;
+  $('#preview-unavailable').hidden = !message;
+}
+
+let previewUnavailableMessage = '3D preview unavailable in this browser.';
 const viewer = new STLViewer($('#model-canvas'), { onUnavailable: message => {
-  $('#preview-unavailable').hidden = false;
-  $('#preview-unavailable').textContent = message || '3D preview unavailable in this browser.';
-  $('#model-canvas').hidden = true;
-  $('.rotation-control').hidden = true;
+  previewUnavailableMessage = message || previewUnavailableMessage;
+  if (selectedPart()?.geometry) showStudentPreview(false, previewUnavailableMessage);
 } });
 
 function populateColors() {
@@ -261,12 +270,12 @@ function updateColorSelection() {
   });
   const hex = colorHex(value);
   $('#custom-color').value = hex;
-  viewer.setColor(hex);
+  if (part?.geometry) viewer.setColor(hex);
 }
 
 function updateDimensions() {
   const part = selectedPart();
-  if (!part) return;
+  if (!part?.geometry) return;
   const dimensions = part.geometry.bounds.map(value => value * (part.unit === 'inch' ? 25.4 : 1));
   $('#dimensions').textContent = dimensions.map(value => Number(value.toFixed(1))).join(' × ') + ' mm';
   const fits = dimensions[0] <= 256 && dimensions[1] <= 256 && dimensions[2] <= 260;
@@ -285,8 +294,17 @@ function renderPartEditor() {
   $('#first-color').value = part.firstColor;
   $('#second-color').value = part.secondColor;
   $('#backup-color').value = part.backupColor;
+  const embeddedUnits = part.unit === 'embedded';
   $('#unit').value = part.unit;
+  $('#unit').disabled = embeddedUnits;
+  $('#unit-field').hidden = embeddedUnits;
+  $('#dimension-row').hidden = embeddedUnits && !part.geometry;
+  $('#dimension-values').hidden = !part.geometry;
+  $('#fit-message').hidden = !part.geometry;
+  $('#print-volume').hidden = !part.geometry;
   $('#preview-filename').textContent = part.file.name;
+  if (!part.geometry) showStudentPreview(false, '3D preview unavailable for this format. Open the file in Bambu Studio.');
+  else showStudentPreview(viewer.available, viewer.available ? '' : previewUnavailableMessage);
   viewer.setModel(part.geometry);
   updateColorSelection();
   updateDimensions();
@@ -333,30 +351,35 @@ function savePartOptions() {
   part.firstColor = normalizeColorPreference($('#first-color').value);
   part.secondColor = normalizeColorPreference($('#second-color').value);
   part.backupColor = $('#backup-color').value.trim();
-  part.unit = $('#unit').value;
-  lastOptions = { material: part.material, firstColor: part.firstColor || lastOptions.firstColor, secondColor: part.secondColor, backupColor: part.backupColor || lastOptions.backupColor, unit: part.unit };
+  if (part.unit !== 'embedded') part.unit = $('#unit').value;
+  lastOptions = { material: part.material, firstColor: part.firstColor || lastOptions.firstColor, secondColor: part.secondColor, backupColor: part.backupColor || lastOptions.backupColor, unit: part.unit === 'embedded' ? lastOptions.unit : part.unit };
   renderFiles();
   updateColorSelection();
   updateDimensions();
 }
 
 async function addFiles(incoming) {
-  if (parsing || submitting || !incoming.length) return;
-  if (parts.length + incoming.length > MAX_FILES) { setMessage('#submission-message', 'Maximum 10 STL files per request.', true); return; }
+  if (!configReady || parsing || submitting || !incoming.length) return;
+  if (parts.length + incoming.length > MAX_FILES) { setMessage('#submission-message', 'Maximum 10 model files per request.', true); $('#files').value = ''; return; }
   const inherited = { ...lastOptions };
   parsing = true;
   $('#files').disabled = true;
   $('#review-button').disabled = true;
-  setMessage('#submission-message', 'Reading STL files…');
+  setMessage('#submission-message', 'Reading model files…');
   try {
     const additions = [];
     for (const file of incoming) {
-      if (!/\.stl$/i.test(file.name)) throw new Error('Choose STL files only.');
+      const extension = modelExtension(file.name);
+      if (!acceptedExtensions.includes(extension)) throw new Error(`Supported formats: ${uploadTypes()}.`);
+      if (/\.(?:gcode|toolpath|slices)\.3mf$/i.test(file.name)) throw new Error('Choose an unsliced 3MF model file.');
       if (file.size > MAX_BYTES) throw new Error(`${file.name} exceeds 10 MB.`);
       if (!file.size) throw new Error(`${file.name} is empty.`);
-      let geometry;
-      try { geometry = parseSTL(await file.arrayBuffer()); } catch (error) { throw new Error(`${file.name}: ${error.message}`); }
-      additions.push({ id: createId(), file, geometry, quantity: 1, ...inherited });
+      let geometry = null;
+      if (extension === '.stl') {
+        try { geometry = parseSTL(await file.arrayBuffer()); } catch (error) { throw new Error(`${file.name}: ${error.message}`); }
+      }
+      const unit = extension === '.stl' || extension === '.obj' ? inherited.unit : 'embedded';
+      additions.push({ id: createId(), file, geometry, quantity: 1, ...inherited, unit });
     }
     parts.push(...additions);
     selectedPartId = additions[0].id;
@@ -368,7 +391,7 @@ async function addFiles(incoming) {
 }
 
 $('#files').addEventListener('change', event => addFiles([...event.target.files]));
-$('#drop-zone').addEventListener('dragover', event => { event.preventDefault(); if (!submitting && !parsing) $('#drop-zone').classList.add('is-dragging'); });
+$('#drop-zone').addEventListener('dragover', event => { event.preventDefault(); if (configReady && !submitting && !parsing) $('#drop-zone').classList.add('is-dragging'); });
 $('#drop-zone').addEventListener('dragleave', () => $('#drop-zone').classList.remove('is-dragging'));
 $('#drop-zone').addEventListener('drop', event => { event.preventDefault(); $('#drop-zone').classList.remove('is-dragging'); addFiles([...event.dataTransfer.files]); });
 $$('input[name=material]').forEach(input => input.addEventListener('change', savePartOptions));
@@ -385,7 +408,7 @@ $('#reset-view').addEventListener('click', () => { viewer.reset(); $('#rotation'
 $('#email').addEventListener('input', event => event.target.setCustomValidity(allowedEmail(event.target.value) ? '' : 'Use an @umich.edu email address.'));
 
 function validateParts() {
-  if (!parts.length) throw new Error('Add at least one STL file.');
+  if (!parts.length) throw new Error('Add at least one model file.');
   for (const part of parts) {
     if (!Number.isInteger(part.quantity) || part.quantity < 1 || part.quantity > 999) throw new Error(`Enter a whole quantity from 1 to 999 for ${part.file.name}.`);
     const { firstColor, secondColor, backupColor } = optionsOf(part);
@@ -419,7 +442,7 @@ $('#submission-form').addEventListener('submit', event => {
         ? `Color: ${NO_PREFERENCE}`
         : `First: ${part.firstColor} · Second: ${part.secondColor || '—'} · Backup: ${part.backupColor}`;
       material.textContent = `Material: ${part.material} · ${colorText}`;
-      const unit = document.createElement('p'); unit.textContent = `STL units: ${part.unit === 'inch' ? 'inches' : 'millimeters'}`;
+      const unit = document.createElement('p'); unit.textContent = `Units: ${unitLabel(part.unit)}`;
       item.append(title, material, unit); $('#review-parts').append(item);
     }
     $('#submission-form').hidden = true;
@@ -529,7 +552,7 @@ async function lookupStatus(email = $('#status-email').value) {
       const details = document.createElement('dl'); details.className = 'details-list';
       const facts = [['Queue position', request.queuePosition ? `#${request.queuePosition}` : '—'], ['Estimated completion', completionText(request)]];
       const partProgress = partProgressCounts(request.partProgress);
-      if (partProgress) facts.push(['STL files printed', `${partProgress.printed} of ${partProgress.total}`]);
+      if (partProgress) facts.push(['Files printed', `${partProgress.printed} of ${partProgress.total}`]);
       if (request.stageStartedAt) facts.push(['Stage started', formatDate(request.stageStartedAt, {timeZoneName:'short'})]);
       facts.push(['Last update', formatDate(request.updatedAt)]);
       appendDetails(details, facts);
@@ -575,7 +598,7 @@ function renderQueueRow(request) {
   const partProgress = partProgressCounts(request.partProgress);
   if (partProgress) {
     const printed = document.createElement('small');
-    printed.textContent = `${partProgress.printed} of ${partProgress.total} STL files printed`;
+    printed.textContent = `${partProgress.printed} of ${partProgress.total} files printed`;
     title.append(printed);
   }
 
@@ -643,10 +666,14 @@ async function initialize() {
   populateColors(); renderFiles(); renderPartEditor();
   try {
     const config = await api('config');
+    acceptedExtensions = acceptedModelExtensions(config.acceptedExtensions);
+    if (!acceptedExtensions.length) throw new Error('No supported model file formats are available.');
+    $('#files').accept = acceptedExtensions.join(',');
+    $('#upload-limits').textContent = `${uploadTypes()} · Choose files or drop them here`;
     colors = config.colors && Object.keys(config.colors).length ? config.colors : fallbackColors;
     populateColors();
     renderPartEditor();
-    configReady = true; $('#review-button').disabled = false; globalMessage();
+    configReady = true; $('#files').disabled = false; $('#review-button').disabled = false; globalMessage();
   } catch (error) { globalMessage(`Portal unavailable: ${error.message}`); }
   await navigate();
 }
