@@ -1,8 +1,9 @@
-import { parseSTL, STLViewer } from './stl-viewer.js?v=20261112-model-formats';
-import { SITE_CONFIG } from './site-config.js?v=20261112-model-formats';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-model-formats';
-import { acceptedModelExtensions, modelExtension, responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-model-formats';
-import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261112-model-formats';
+import { STLViewer } from './stl-viewer.js?v=20261112-model-previews';
+import { SITE_CONFIG } from './site-config.js?v=20261112-model-previews';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-model-previews';
+import { acceptedModelExtensions, modelExtension, responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-model-previews';
+import { ModelPreview, previewDimensions, supportsModelPreview } from './model-preview.js?v=20261112-model-previews';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261112-model-previews';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -17,7 +18,6 @@ let configReady = false;
 let parts = [];
 let selectedPartId = null;
 let lastOptions = { ...defaultOptions };
-let parsing = false;
 let submitting = false;
 let reviewed = null;
 let submissionKey = null;
@@ -43,6 +43,7 @@ let staffController = null;
 
 const runtime = resolveRuntimeConfig(SITE_CONFIG, document.baseURI);
 const apiUrl = path => endpointUrl(path, runtime);
+const stepWasmUrl = apiUrl('preview/step.wasm') + '?v=20261112-model-previews';
 const allowedEmail = value => /^[^\s@]+@umich\.edu$/i.test(value.trim());
 const uploadTypes = () => acceptedExtensions.map(extension => extension === '.3mf' ? 'unsliced 3MF' : extension.slice(1).toUpperCase()).join(', ');
 const unitLabel = unit => unit === 'embedded' ? 'from file' : unit === 'inch' ? 'inches' : 'millimeters';
@@ -226,10 +227,58 @@ function showStudentPreview(visible, message = '') {
 }
 
 let previewUnavailableMessage = '3D preview unavailable in this browser.';
+let studentGeometry = null;
+let studentPreviewPart = null;
 const viewer = new STLViewer($('#model-canvas'), { onUnavailable: message => {
   previewUnavailableMessage = message || previewUnavailableMessage;
-  if (selectedPart()?.geometry) showStudentPreview(false, previewUnavailableMessage);
+  if (studentGeometry) showStudentPreview(false, previewUnavailableMessage);
 } });
+
+function renderStudentPreview(message = '') {
+  const part = selectedPart();
+  if (!part) return;
+  const hasGeometry = Boolean(studentGeometry);
+  const showFit = hasGeometry && part.unit !== 'embedded';
+  $('#dimension-row').hidden = part.unit === 'embedded' && !hasGeometry;
+  $('#dimension-values').hidden = !hasGeometry;
+  $('#fit-message').hidden = !showFit;
+  $('#print-volume').hidden = !showFit;
+  showStudentPreview(hasGeometry && viewer.available, hasGeometry && !viewer.available ? previewUnavailableMessage : message);
+  updateDimensions();
+  if (hasGeometry && viewer.available) viewer.resize();
+}
+
+const studentPreview = new ModelPreview({
+  wasmUrl:stepWasmUrl,
+  load:({part}) => part.file.arrayBuffer(),
+  clearModel:() => { studentGeometry = null; viewer.setModel(null); },
+  onModel:(geometry,{part}) => {
+    viewer.setColor(colorHex(part.firstColor)).setModel(geometry);
+    studentGeometry = geometry;
+  },
+  onState:state => {
+    if (state.context && state.context.part !== selectedPart()) return;
+    const message = state.status === 'loading' ? 'Loading preview…'
+      : state.status === 'error' ? `${state.message} Open the file in Bambu Studio.` : '';
+    renderStudentPreview(message);
+  },
+});
+
+function closeStudentPreview() {
+  studentPreviewPart = null;
+  studentPreview.close();
+}
+
+function openStudentPreview() {
+  const part = selectedPart();
+  if (page !== 'submit' || $('#submission-form').hidden || !part) {
+    closeStudentPreview();
+    return;
+  }
+  if (studentPreviewPart === part) return;
+  studentPreviewPart = part;
+  void studentPreview.open({part, extension:modelExtension(part.file.name)});
+}
 
 function populateColors() {
   $('#colors').replaceChildren();
@@ -270,14 +319,15 @@ function updateColorSelection() {
   });
   const hex = colorHex(value);
   $('#custom-color').value = hex;
-  if (part?.geometry) viewer.setColor(hex);
+  if (studentGeometry) viewer.setColor(hex);
 }
 
 function updateDimensions() {
   const part = selectedPart();
-  if (!part?.geometry) return;
-  const dimensions = part.geometry.bounds.map(value => value * (part.unit === 'inch' ? 25.4 : 1));
+  if (!part || !studentGeometry) return;
+  const dimensions = previewDimensions(studentGeometry, part.unit);
   $('#dimensions').textContent = dimensions.map(value => Number(value.toFixed(1))).join(' × ') + ' mm';
+  if (part.unit === 'embedded') return;
   const fits = dimensions[0] <= 256 && dimensions[1] <= 256 && dimensions[2] <= 260;
   $('#fit-message').textContent = fits ? 'Within print volume · Staff review required' : 'Exceeds print volume · Check units and orientation';
   $('#fit-message').classList.toggle('warning', !fits);
@@ -289,7 +339,7 @@ function renderPartEditor() {
   $('#preview-panel').hidden = !part;
   $('#empty-parts').hidden = !!part;
   $('#part-name').textContent = part ? part.file.name : 'Part settings';
-  if (!part) { viewer.setModel(null); return; }
+  if (!part) { closeStudentPreview(); return; }
   $$('input[name=material]').forEach(input => { input.checked = input.value === part.material; });
   $('#first-color').value = part.firstColor;
   $('#second-color').value = part.secondColor;
@@ -298,16 +348,9 @@ function renderPartEditor() {
   $('#unit').value = part.unit;
   $('#unit').disabled = embeddedUnits;
   $('#unit-field').hidden = embeddedUnits;
-  $('#dimension-row').hidden = embeddedUnits && !part.geometry;
-  $('#dimension-values').hidden = !part.geometry;
-  $('#fit-message').hidden = !part.geometry;
-  $('#print-volume').hidden = !part.geometry;
   $('#preview-filename').textContent = part.file.name;
-  if (!part.geometry) showStudentPreview(false, '3D preview unavailable for this format. Open the file in Bambu Studio.');
-  else showStudentPreview(viewer.available, viewer.available ? '' : previewUnavailableMessage);
-  viewer.setModel(part.geometry);
+  openStudentPreview();
   updateColorSelection();
-  updateDimensions();
 }
 
 function renderFiles() {
@@ -341,7 +384,7 @@ function renderFiles() {
     row.append(select, label, remove);
     $('#file-list').append(row);
   }
-  $('#review-button').disabled = !configReady || parsing || submitting;
+  $('#review-button').disabled = !configReady || submitting;
 }
 
 function savePartOptions() {
@@ -358,28 +401,20 @@ function savePartOptions() {
   updateDimensions();
 }
 
-async function addFiles(incoming) {
-  if (!configReady || parsing || submitting || !incoming.length) return;
+function addFiles(incoming) {
+  if (!configReady || submitting || !incoming.length) return;
   if (parts.length + incoming.length > MAX_FILES) { setMessage('#submission-message', 'Maximum 10 model files per request.', true); $('#files').value = ''; return; }
   const inherited = { ...lastOptions };
-  parsing = true;
-  $('#files').disabled = true;
-  $('#review-button').disabled = true;
-  setMessage('#submission-message', 'Reading model files…');
   try {
     const additions = [];
     for (const file of incoming) {
       const extension = modelExtension(file.name);
       if (!acceptedExtensions.includes(extension)) throw new Error(`Supported formats: ${uploadTypes()}.`);
-      if (/\.(?:gcode|toolpath|slices)\.3mf$/i.test(file.name)) throw new Error('Choose an unsliced 3MF model file.');
+      if (/\.(?:gcode|bgcode|gco|toolpath|slices)(?:\.|$)/i.test(file.name)) throw new Error('Sliced files and G-code are not accepted.');
       if (file.size > MAX_BYTES) throw new Error(`${file.name} exceeds 10 MB.`);
       if (!file.size) throw new Error(`${file.name} is empty.`);
-      let geometry = null;
-      if (extension === '.stl') {
-        try { geometry = parseSTL(await file.arrayBuffer()); } catch (error) { throw new Error(`${file.name}: ${error.message}`); }
-      }
       const unit = extension === '.stl' || extension === '.obj' ? inherited.unit : 'embedded';
-      additions.push({ id: createId(), file, geometry, quantity: 1, ...inherited, unit });
+      additions.push({ id: createId(), file, quantity: 1, ...inherited, unit });
     }
     parts.push(...additions);
     selectedPartId = additions[0].id;
@@ -387,11 +422,11 @@ async function addFiles(incoming) {
     renderPartEditor();
     setMessage('#submission-message');
   } catch (error) { setMessage('#submission-message', error.message, true); }
-  finally { parsing = false; $('#files').disabled = false; $('#files').value = ''; $('#review-button').disabled = !configReady; }
+  finally { $('#files').value = ''; }
 }
 
 $('#files').addEventListener('change', event => addFiles([...event.target.files]));
-$('#drop-zone').addEventListener('dragover', event => { event.preventDefault(); if (configReady && !submitting && !parsing) $('#drop-zone').classList.add('is-dragging'); });
+$('#drop-zone').addEventListener('dragover', event => { event.preventDefault(); if (configReady && !submitting) $('#drop-zone').classList.add('is-dragging'); });
 $('#drop-zone').addEventListener('dragleave', () => $('#drop-zone').classList.remove('is-dragging'));
 $('#drop-zone').addEventListener('drop', event => { event.preventDefault(); $('#drop-zone').classList.remove('is-dragging'); addFiles([...event.dataTransfer.files]); });
 $$('input[name=material]').forEach(input => input.addEventListener('change', savePartOptions));
@@ -419,7 +454,7 @@ function validateParts() {
 
 $('#submission-form').addEventListener('submit', event => {
   event.preventDefault();
-  if (parsing || submitting || !configReady) return;
+  if (submitting || !configReady) return;
   try {
     savePartOptions();
     const email = $('#email').value.trim();
@@ -446,6 +481,7 @@ $('#submission-form').addEventListener('submit', event => {
       item.append(title, material, unit); $('#review-parts').append(item);
     }
     $('#submission-form').hidden = true;
+    closeStudentPreview();
     $('#review-panel').hidden = false;
     updateSubmissionControls();
     setMessage('#submission-message');
@@ -453,7 +489,7 @@ $('#submission-form').addEventListener('submit', event => {
   } catch (error) { setMessage('#submission-message', error.message, true); }
 });
 
-$('#edit-request').addEventListener('click', () => { if (submitting) return; $('#review-panel').hidden = true; $('#submission-form').hidden = false; uploadAttempt = null; setMessage('#submission-message'); });
+$('#edit-request').addEventListener('click', () => { if (submitting) return; $('#review-panel').hidden = true; $('#submission-form').hidden = false; uploadAttempt = null; openStudentPreview(); setMessage('#submission-message'); });
 
 function updateSubmissionControls() {
   const remaining = uploadCooldown.remainingSeconds;
@@ -657,7 +693,8 @@ async function navigate() {
   $$('[data-page]').forEach(section => { section.hidden = section.dataset.page !== page; });
   $$('[data-nav]').forEach(link => { if (link.dataset.nav === page) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); });
   updateVisibleTrackers();
-  if (page === 'submit') viewer.resize();
+  if (page === 'submit') openStudentPreview();
+  else closeStudentPreview();
   if (page === 'queue') await loadPublicQueue();
   if (page === 'admin' && staffController) { await staffController.checkSession(); if (staffController.isAuthenticated()) await Promise.all([staffController.loadAdminRequests({ preserveEditor: editorDirty }), staffController.loadSettings()]); }
 }
@@ -679,6 +716,8 @@ async function initialize() {
 }
 
 window.addEventListener('hashchange', navigate);
+window.addEventListener('pagehide', closeStudentPreview);
+window.addEventListener('pageshow', event => { if (event.persisted) openStudentPreview(); });
 window.addEventListener('beforeunload', event => { if (submitting) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('visibilitychange', updateVisibleTrackers);
 setInterval(updateVisibleTrackers, 1000);

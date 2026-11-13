@@ -6,8 +6,9 @@
   <meta name="theme-color" content="#00274c">
   <meta name="description" content="EECS 373/473 3D print requests and queue.">
   <title>EECS 373/473 3D Print Request</title>
-  <link rel="stylesheet" href="./styles.css?v=20261112-model-formats">
-  <script type="module" src="./app.js?v=20261112-model-formats"></script>
+  <link rel="icon" type="image/svg+xml" href="./print-tab.svg?v=20261112-model-previews">
+  <link rel="stylesheet" href="./styles.css?v=20261112-model-previews">
+  <script type="module" src="./app.js?v=20261112-model-previews"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -31,7 +32,7 @@
               <div id="file-list" class="file-list" aria-label="Parts to print"></div>
               <div id="empty-parts" class="empty-state">Add a model to choose material and color.</div>
               <div id="preview-panel" hidden>
-                <div id="model-viewer" class="viewer"><div class="viewer-toolbar"><span class="tag">3D preview</span><button id="reset-view" type="button" class="button plain">Reset view</button></div><canvas id="model-canvas" aria-label="3D preview of the selected part. Drag to orbit, or use the rotation slider."></canvas><div class="viewer-caption"><span id="preview-filename"></span><span>Drag to orbit</span></div></div>
+                <div id="model-viewer" class="viewer"><div class="viewer-toolbar"><span class="tag">Geometry preview</span><button id="reset-view" type="button" class="button plain">Reset view</button></div><canvas id="model-canvas" aria-label="3D preview of the selected part. Drag to orbit, or use the rotation slider."></canvas><div class="viewer-caption"><span id="preview-filename"></span><span>Drag to orbit</span></div></div>
                 <p id="preview-unavailable" class="muted small" role="status" hidden></p>
                 <label id="rotation-control" class="rotation-control" for="rotation">Rotate part<input id="rotation" type="range" min="-180" max="180" value="-28"></label>
                 <div id="dimension-row" class="dimension-row"><div id="dimension-values"><span class="eyebrow">Width × depth × height</span><strong id="dimensions">—</strong></div><label id="unit-field" for="unit">Model units<select id="unit"><option value="mm">Millimeters</option><option value="inch">Inches</option></select></label></div>
