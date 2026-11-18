@@ -3,7 +3,7 @@ import { SITE_CONFIG } from './site-config.js?v=20261112-model-previews';
 import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-model-previews';
 import { acceptedModelExtensions, modelExtension, responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-model-previews';
 import { ModelPreview, previewDimensions, supportsModelPreview } from './model-preview.js?v=20261112-model-previews';
-import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, orderRequestQueue, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261118-staff-layout';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, orderRequestQueue, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261118-newest-first';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
