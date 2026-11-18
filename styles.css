@@ -249,12 +249,6 @@
   border-inline-start-color: #2a639e;
 }
 
-.staff-comment-staff,
-.request-editor #staff-note {
-  background: #fff7df;
-  border-inline-start-color: #9a6100;
-}
-
 .staff-comment-heading {
   margin-bottom: 4px;
   font-size: 13px;
@@ -274,15 +268,6 @@
   color: var(--navy);
   font-size: 13px;
   text-decoration: underline;
-}
-
-.request-editor .instruction-panel {
-  padding: 10px 12px;
-  font-size: 15px;
-}
-
-.request-editor #staff-note {
-  font-size: 16px;
 }
 
 .editor-part-tracking {
@@ -350,4 +335,243 @@
 #no-color-preference[aria-pressed="true"] {
   border-color: var(--navy);
   background: var(--soft);
+}
+
+/* Keep each staff request, its comment, and its file details in one surface. */
+.admin-request-list {
+  gap: 18px;
+}
+
+.admin-request {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid #b9c8d6;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.admin-request.selected {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 1px var(--navy);
+}
+
+.staff-request-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, .72fr);
+  gap: 18px 24px;
+  align-items: start;
+  min-width: 0;
+}
+
+.staff-request-main {
+  min-width: 0;
+}
+
+.staff-request-main > .public-row {
+  grid-template-columns: 26px minmax(0, 1fr) minmax(0, .9fr);
+  align-items: start;
+  padding: 0;
+  border: 0;
+}
+
+.staff-request-main .queue-estimate {
+  grid-column: 2 / -1;
+}
+
+.staff-request-main .staff-queue-actions {
+  gap: 10px;
+  padding: 14px 0 0 38px;
+}
+
+.staff-request-main .staff-queue-control-line {
+  justify-content: flex-start;
+  gap: 10px 14px;
+}
+
+.staff-request-layout > .staff-request-side {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-width: 0;
+}
+
+.staff-request-layout > .staff-comments,
+.staff-request-side > .staff-comments {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  min-width: 0;
+}
+
+.staff-request-side > .completion-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.staff-request-side .completion-picker > h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.staff-request-side .completion-form {
+  min-width: 0;
+  margin: 10px 0 0;
+}
+
+.staff-request-side .completion-presets {
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.staff-request-side .completion-presets .button {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.staff-request-side .completion-form .field {
+  min-width: 0;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.staff-request-side .completion-form input {
+  min-width: 0;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.staff-request-side .completion-selection {
+  font-size: 12px;
+}
+
+.staff-request-layout .staff-comment {
+  min-height: 106px;
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.staff-request-layout .staff-comment-text {
+  min-height: 42px;
+  font-size: 14px;
+}
+
+.staff-comment-empty .staff-comment-text,
+.staff-comment-text.is-empty,
+.staff-comment-text.empty-comment {
+  color: var(--subtle);
+}
+
+.admin-request > .request-editor {
+  margin: 0;
+  padding: 18px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.admin-request .request-editor .editor-parts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px 24px;
+  margin: 0;
+}
+
+.admin-request .request-editor .editor-part {
+  min-width: 0;
+  padding-bottom: 14px;
+}
+
+.admin-request .request-editor .editor-part-tracking {
+  margin-bottom: 16px;
+}
+
+.admin-request .request-editor .download-button {
+  width: auto;
+  margin-bottom: 16px;
+}
+
+.admin-request .request-editor .event-history {
+  margin-top: 18px;
+}
+
+/* Shared material/color labels keep icons supplemental to readable text. */
+.queue-preferences,
+.part-preferences {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.model-preference,
+.part-preference-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.model-preference > span:not(.color-swatch),
+.part-preference-line > span:not(.color-swatch) {
+  min-width: 0;
+}
+
+.preference-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--subtle);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 1px solid #718295;
+  border-radius: 50%;
+  background: var(--swatch-color, transparent);
+}
+
+.part-preferences {
+  margin-top: 6px;
+}
+
+.part-preference-line {
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .staff-request-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .admin-request .request-editor .editor-parts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 390px) {
+  .admin-request {
+    padding: 14px;
+  }
+
+  .staff-request-main > .public-row {
+    grid-template-columns: 24px minmax(0, 1fr) minmax(0, .85fr);
+    gap: 10px;
+  }
+
+  .staff-request-main .staff-queue-actions {
+    padding-left: 34px;
+  }
 }

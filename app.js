@@ -3,7 +3,7 @@ import { SITE_CONFIG } from './site-config.js?v=20261112-model-previews';
 import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-model-previews';
 import { acceptedModelExtensions, modelExtension, responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-model-previews';
 import { ModelPreview, previewDimensions, supportsModelPreview } from './model-preview.js?v=20261112-model-previews';
-import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261112-model-previews';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, orderRequestQueue, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261118-staff-layout';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -35,7 +35,6 @@ let authenticated = false;
 let adminRequests = [];
 let selectedRequest = null;
 let adminSelectionSequence = 0;
-let editorDirty = false;
 let adminLoading = false;
 let publicQueueLoading = false;
 let settings = null;
@@ -199,12 +198,6 @@ function updateVisibleTrackers() {
     const entry = timedTrackers.get(tracker);
     if (entry) updateTrackerFill(tracker, entry, requestProgress(entry.request, now));
   }
-}
-
-function formatHours(value) {
-  if (value == null || !Number.isFinite(Number(value))) return 'Not estimated';
-  const minutes = Math.round(Number(value) * 60);
-  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} m`;
 }
 
 function normalizeColorPreference(value) {
@@ -615,6 +608,46 @@ $('#status-email').addEventListener('input', () => {
   setMessage('#status-message');
 });
 
+function renderPreference(value, kind, label = '') {
+  const preference = document.createElement('span');
+  preference.className = `model-preference ${kind}-preference`;
+  if (label) {
+    const name = document.createElement('span');
+    name.className = 'preference-label';
+    name.textContent = label;
+    preference.append(name);
+  }
+  if (kind === 'material') {
+    const namespace = 'http://www.w3.org/2000/svg';
+    const icon = document.createElementNS(namespace, 'svg');
+    icon.classList.add('preference-icon');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.setAttribute('focusable', 'false');
+    for (const [tag, attributes] of [
+      ['circle', {cx:'10', cy:'12', r:'8'}],
+      ['circle', {cx:'10', cy:'12', r:'3'}],
+      ['path', {d:'M17 7h3v13h-4'}],
+    ]) {
+      const shape = document.createElementNS(namespace, tag);
+      for (const [key, content] of Object.entries(attributes)) shape.setAttribute(key, content);
+      icon.append(shape);
+    }
+    preference.append(icon);
+  } else {
+    const swatch = document.createElement('span');
+    swatch.className = 'color-swatch';
+    swatch.setAttribute('aria-hidden', 'true');
+    if (value === NO_PREFERENCE) swatch.classList.add('any-color-swatch');
+    else swatch.style.backgroundColor = colorHex(value);
+    preference.append(swatch);
+  }
+  const text = document.createElement('span');
+  text.textContent = value === NO_PREFERENCE ? kind === 'material' ? 'Any material' : 'Any color' : value;
+  preference.append(text);
+  return preference;
+}
+
 function renderQueueRow(request) {
   const row = document.createElement('div');
   row.className = 'public-row';
@@ -638,10 +671,10 @@ function renderQueueRow(request) {
     title.append(printed);
   }
 
-  const material = document.createElement('span');
-  const materialSummary = request.materialSummary === 'No preference' ? 'Any material' : request.materialSummary;
-  const colorSummary = request.colorSummary === 'No preference' ? 'Any color' : request.colorSummary;
-  material.textContent = [materialSummary, colorSummary].filter(Boolean).join(' / ');
+  const preferences = document.createElement('div');
+  preferences.className = 'queue-preferences';
+  if (request.materialSummary) preferences.append(renderPreference(request.materialSummary, 'material'));
+  for (const color of (request.colorSummary || '').split(', ').filter(Boolean)) preferences.append(renderPreference(color, 'color'));
   const timing = document.createElement('div');
   timing.className = 'queue-estimate';
   const label = document.createElement('small');
@@ -655,7 +688,7 @@ function renderQueueRow(request) {
     completed.textContent = `Completed: ${formatDate(request.completedAt, {timeZoneName:'short'})}`;
     timing.append(completed);
   }
-  row.append(rank, title, material, timing, renderProgressTracker(request, true));
+  row.append(rank, title, preferences, timing, renderProgressTracker(request, true));
   return row;
 }
 
@@ -696,7 +729,7 @@ async function navigate() {
   if (page === 'submit') openStudentPreview();
   else closeStudentPreview();
   if (page === 'queue') await loadPublicQueue();
-  if (page === 'admin' && staffController) { await staffController.checkSession(); if (staffController.isAuthenticated()) await Promise.all([staffController.loadAdminRequests({ preserveEditor: editorDirty }), staffController.loadSettings()]); }
+  if (page === 'admin' && staffController) { await staffController.checkSession(); if (staffController.isAuthenticated()) await Promise.all([staffController.loadAdminRequests(), staffController.loadSettings()]); }
 }
 
 async function initialize() {

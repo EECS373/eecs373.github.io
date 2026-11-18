@@ -104,6 +104,20 @@ export function isCurrentRequest(request, now = Date.now()) {
   return !Number.isFinite(completed) || now - completed < 48 * 3600000;
 }
 
+export function orderRequestQueue(requests) {
+  const chronological = [...requests].sort((left, right) => {
+    const leftTime = Date.parse(left.createdAt ?? '');
+    const rightTime = Date.parse(right.createdAt ?? '');
+    const first = Number.isFinite(leftTime) ? leftTime : Infinity;
+    const second = Number.isFinite(rightTime) ? rightTime : Infinity;
+    return first - second || Number(left.id) - Number(right.id);
+  });
+  const queued = chronological.filter(request => request.status === 'Queued')
+    .sort((left, right) => Number(left.queueOrder ?? 0) - Number(right.queueOrder ?? 0) || Number(left.id) - Number(right.id));
+  let nextQueued = 0;
+  return chronological.map(request => request.status === 'Queued' ? queued[nextQueued++] : request);
+}
+
 export function requestProgress(request, now = Date.now()) {
   const statusIndex = STATUSES.indexOf(request.status);
   if (statusIndex < 0) return null;
