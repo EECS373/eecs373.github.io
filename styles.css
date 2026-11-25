@@ -575,3 +575,9 @@
     padding-left: 34px;
   }
 }
+
+#admin-pages { margin: 1rem 0; text-align: center; }
+#page-number { margin-inline: .75rem; }
+#delete-request { color: #872b27; }
+.page-heading:has(#queue-sort) { flex-wrap: wrap; gap: .75rem; }
+.page-heading label:has(#queue-sort) { margin-left: auto; }

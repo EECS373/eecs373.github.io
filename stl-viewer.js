@@ -1,6 +1,12 @@
 const MAX_TRIANGLES = 300_000;
 const NUMBER = '[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?';
 
+export function fitsBinaryStl(buffer, offset, size, count) {
+  const expected=84+50*count, padding=size-expected;
+  return count>0 && padding>=0 && padding<=64 &&
+    new Uint8Array(buffer,offset+expected,padding).every(byte=>[0,9,10,13,32].includes(byte));
+}
+
 /** Read an STL without changing its original bytes or its X/Y/Z coordinate system. */
 export function parseSTL(input) {
   let buffer;
@@ -12,7 +18,7 @@ export function parseSTL(input) {
   const view = new DataView(buffer);
   const binaryCount = buffer.byteLength >= 84 ? view.getUint32(80, true) : 0;
   let positions;
-  if (binaryCount > 0 && 84 + binaryCount * 50 === buffer.byteLength) {
+  if (fitsBinaryStl(buffer,0,buffer.byteLength,binaryCount)) {
     if (binaryCount > MAX_TRIANGLES) throw new Error('The STL preview supports up to 300,000 triangles.');
     positions = new Float32Array(binaryCount * 9);
     for (let triangle = 0; triangle < binaryCount; triangle++) {

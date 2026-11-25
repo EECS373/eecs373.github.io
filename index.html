@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#00274c">
   <meta name="description" content="EECS 373/473 3D print requests and queue.">
   <title>EECS 373/473 3D Print Request</title>
-  <link rel="icon" type="image/svg+xml" href="./print-tab.svg?v=20261112-model-previews">
-  <link rel="stylesheet" href="./styles.css?v=20261118-newest-first">
-  <script type="module" src="./app.js?v=20261118-newest-first"></script>
+  <link rel="icon" type="image/svg+xml" href="./print-tab.svg?v=bd10ff93d3acf496">
+  <link rel="stylesheet" href="./styles.css?v=b94acfc49ed650cd">
+  <script type="module" src="./app.js?v=be09c1c21df1d91b"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -87,7 +87,7 @@
 
       <section data-page="status" aria-labelledby="status-heading" hidden><div class="page-heading"><h1 id="status-heading">Request status</h1></div><form id="status-form" class="lookup-form"><label class="field" for="status-email">UMich email<input id="status-email" type="email" required maxlength="254" autocomplete="email" placeholder="uniqname@umich.edu" autocapitalize="none" spellcheck="false"></label><button type="submit" class="button primary">View status</button></form><p id="status-message" class="message" role="status"></p><div id="status-results" class="status-results"></div></section>
 
-      <section data-page="queue" aria-labelledby="queue-heading" hidden><div class="page-heading"><h1 id="queue-heading">Print queue</h1><button type="button" id="refresh-queue" class="button secondary">Refresh</button></div><p id="queue-message" class="message" role="status"></p><div id="public-queue" class="public-queue"></div><p class="muted small queue-footnote">Completion times are staff estimates. Completed requests leave this queue after 48 hours.</p></section>
+      <section data-page="queue" aria-labelledby="queue-heading" hidden><div class="page-heading"><h1 id="queue-heading">Print queue</h1><label>Order <select id="queue-sort"><option value="newest">Newest first</option><option value="priority">Print priority</option></select></label><button type="button" id="refresh-queue" class="button secondary">Refresh</button></div><p id="queue-message" class="message" role="status"></p><div id="public-queue" class="public-queue"></div><p class="muted small queue-footnote">Completion times are staff estimates. Completed requests leave this queue after 48 hours.</p></section>
     </main>
     <footer class="site-footer"><span>EECS 373 / 473</span><span>Print requests</span></footer>
   </div>

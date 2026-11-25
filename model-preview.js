@@ -1,4 +1,4 @@
-import { parseSTL } from './stl-viewer.js?v=20261112-model-previews';
+import { parseSTL } from './stl-viewer.js?v=efec90435cd27585';
 
 export const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
 const MAX_TRIANGLES = 300_000;
@@ -30,8 +30,8 @@ export async function decodeModelPreview(bytes, extension, { signal, wasmUrl, Wo
   const step = stepExtensions.has(extension);
   if (step && !wasmUrl) throw new Error('STEP preview is unavailable.');
   const url = step
-    ? new URL('./step-preview-worker.js?v=20261112-model-previews', import.meta.url)
-    : new URL('./mesh-preview-worker.js?v=20261112-model-previews', import.meta.url);
+    ? new URL('./step-preview-worker.js?v=fe6004078edd5726', import.meta.url)
+    : new URL('./mesh-preview-worker.js?v=59725d049e720474', import.meta.url);
 
   return new Promise((resolve, reject) => {
     let worker, settled = false;

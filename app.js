@@ -1,9 +1,9 @@
-import { STLViewer } from './stl-viewer.js?v=20261112-model-previews';
-import { SITE_CONFIG } from './site-config.js?v=20261112-model-previews';
-import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=20261112-model-previews';
-import { acceptedModelExtensions, modelExtension, responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=20261112-model-previews';
-import { ModelPreview, previewDimensions, supportsModelPreview } from './model-preview.js?v=20261112-model-previews';
-import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, orderRequestQueue, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=20261118-newest-first';
+import { STLViewer } from './stl-viewer.js?v=efec90435cd27585';
+import { SITE_CONFIG } from './site-config.js?v=1b34892d8d171a00';
+import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=faf7fa1e716b3e32';
+import { acceptedModelExtensions, modelExtension, responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=77cf5641f5dbcca4';
+import { ModelPreview, previewDimensions, supportsModelPreview } from './model-preview.js?v=459fe3dab76dbfbb';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, orderRequestQueue, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=88b76d2431de8c2c';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -42,7 +42,7 @@ let staffController = null;
 
 const runtime = resolveRuntimeConfig(SITE_CONFIG, document.baseURI);
 const apiUrl = path => endpointUrl(path, runtime);
-const stepWasmUrl = apiUrl('preview/step.wasm') + '?v=20261112-model-previews';
+const stepWasmUrl = (apiUrl('preview/step.wasm') + '?v=ba770b01d8aaa0f0');
 const allowedEmail = value => /^[^\s@]+@umich\.edu$/i.test(value.trim());
 const uploadTypes = () => acceptedExtensions.map(extension => extension === '.3mf' ? 'unsliced 3MF' : extension.slice(1).toUpperCase()).join(', ');
 const unitLabel = unit => unit === 'embedded' ? 'from file' : unit === 'inch' ? 'inches' : 'millimeters';
@@ -700,6 +700,7 @@ async function loadPublicQueue() {
   try {
     const result = await api('queue');
     const requests = publicQueueRecords(result.requests || []);
+    if ($('#queue-sort').value==='priority') requests.sort((a,b)=>(a.queuePosition??Infinity)-(b.queuePosition??Infinity));
     setMessage('#queue-message', requests.length ? '' : 'No requests in the queue.');
     const snapshot = JSON.stringify(requests);
     if (snapshot === queueSnapshot) return;
@@ -714,6 +715,7 @@ async function loadPublicQueue() {
     $('#refresh-queue').disabled = false;
   }
 }
+$('#queue-sort').addEventListener('change',loadPublicQueue);
 $('#refresh-queue').addEventListener('click', loadPublicQueue);
 
 async function navigate() {
@@ -754,5 +756,5 @@ window.addEventListener('pageshow', event => { if (event.persisted) openStudentP
 window.addEventListener('beforeunload', event => { if (submitting) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('visibilitychange', updateVisibleTrackers);
 setInterval(updateVisibleTrackers, 1000);
-setInterval(() => { if (document.hidden) return; if (page === 'queue') loadPublicQueue(); else if (page === 'status' && statusEmail) lookupStatus(statusEmail); }, 30000);
+setInterval(() => { if (document.hidden) return; if (page === 'queue') loadPublicQueue(); else if (page === 'status' && statusEmail) lookupStatus(statusEmail); else if(page==='admin' && staffController?.isAuthenticated()) staffController.loadAdminRequests({background:true}); }, 30000);
 initialize();
