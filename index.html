@@ -7,8 +7,8 @@
   <meta name="description" content="EECS 373/473 3D print requests and queue.">
   <title>EECS 373/473 3D Print Request</title>
   <link rel="icon" type="image/svg+xml" href="./print-tab.svg?v=bd10ff93d3acf496">
-  <link rel="stylesheet" href="./styles.css?v=b94acfc49ed650cd">
-  <script type="module" src="./app.js?v=be09c1c21df1d91b"></script>
+  <link rel="stylesheet" href="./styles.css?v=aa4fae19ecab7e98">
+  <script type="module" src="./app.js?v=fd02cd9a92a9fc63"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -78,7 +78,7 @@
               <button id="review-button" type="submit" class="button primary full" disabled>Review request</button>
             </div>
           </div>
-          <div class="policies"><p>Staff prints all parts. PLA/PETG only. First come; staff approves priority changes.</p><p>Other printers: <a href="https://www.eecs.umich.edu/hub/lessons.html" target="_blank" rel="noopener noreferrer">MESH/CSE</a> (EECS 373 filament available from staff), <a href="https://docs.google.com/forms/d/e/1FAIpQLSdzEFp99KQTYH3R174JkJYH-EUHG8X9hP5fjFPIaWVvcxSuwA/viewform" target="_blank" rel="noopener noreferrer">Robotics</a>, <a href="https://sites.google.com/umich.edu/groundconnections/fabrication-underground/3d-printing-service" target="_blank" rel="noopener noreferrer">Fabrication Underground</a>.</p></div>
+          <div class="policies"><p>Staff prints all parts. PLA/PETG only.</p><p>Other printers: <a href="https://www.eecs.umich.edu/hub/lessons.html" target="_blank" rel="noopener noreferrer">MESH/CSE</a> (EECS 373 filament available from staff), <a href="https://docs.google.com/forms/d/e/1FAIpQLSdzEFp99KQTYH3R174JkJYH-EUHG8X9hP5fjFPIaWVvcxSuwA/viewform" target="_blank" rel="noopener noreferrer">Robotics</a>, <a href="https://sites.google.com/umich.edu/groundconnections/fabrication-underground/3d-printing-service" target="_blank" rel="noopener noreferrer">Fabrication Underground</a>.</p></div>
         </form>
         <section id="review-panel" class="review-panel" aria-labelledby="review-heading" hidden><h2 id="review-heading">Review request</h2><dl id="review-project" class="details-list"></dl><ol id="review-parts" class="review-parts"></ol><div class="actions"><button id="edit-request" type="button" class="button secondary">Edit</button><button id="submit-request" type="button" class="button primary">Submit request</button></div><p id="upload-cooldown" class="field-help" hidden>Try again in <span id="upload-cooldown-time" role="timer" aria-live="off"></span>.</p><div id="upload-progress-panel" class="upload-progress" hidden><label for="upload-progress" id="upload-progress-label">Uploading files…</label><progress id="upload-progress" max="100" value="0"></progress></div></section>
         <div id="submission-success" class="success-panel" hidden><h2>Request submitted</h2><p id="submission-receipt"></p><div class="actions"><button id="view-submitted-status" type="button" class="button primary">View status</button><button id="new-request" type="button" class="button secondary">Submit another request</button></div></div>
@@ -87,7 +87,7 @@
 
       <section data-page="status" aria-labelledby="status-heading" hidden><div class="page-heading"><h1 id="status-heading">Request status</h1></div><form id="status-form" class="lookup-form"><label class="field" for="status-email">UMich email<input id="status-email" type="email" required maxlength="254" autocomplete="email" placeholder="uniqname@umich.edu" autocapitalize="none" spellcheck="false"></label><button type="submit" class="button primary">View status</button></form><p id="status-message" class="message" role="status"></p><div id="status-results" class="status-results"></div></section>
 
-      <section data-page="queue" aria-labelledby="queue-heading" hidden><div class="page-heading"><h1 id="queue-heading">Print queue</h1><label>Order <select id="queue-sort"><option value="newest">Newest first</option><option value="priority">Print priority</option></select></label><button type="button" id="refresh-queue" class="button secondary">Refresh</button></div><p id="queue-message" class="message" role="status"></p><div id="public-queue" class="public-queue"></div><p class="muted small queue-footnote">Completion times are staff estimates. Completed requests leave this queue after 48 hours.</p></section>
+      <section data-page="queue" aria-labelledby="queue-heading" hidden><div class="page-heading"><h1 id="queue-heading">Print queue</h1><button type="button" id="refresh-queue" class="button secondary">Refresh</button></div><p id="queue-message" class="message" role="status"></p><div id="public-queue" class="public-queue"></div><p class="muted small queue-footnote">Completion times are staff estimates. Completed requests leave this queue after 48 hours.</p></section>
     </main>
     <footer class="site-footer"><span>EECS 373 / 473</span><span>Print requests</span></footer>
   </div>

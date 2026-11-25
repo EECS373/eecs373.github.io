@@ -3,7 +3,7 @@ import { SITE_CONFIG } from './site-config.js?v=1b34892d8d171a00';
 import { resolveRuntimeConfig, endpointUrl, credentialsForEndpoint, staffRedirectUrl } from './runtime-config.js?v=faf7fa1e716b3e32';
 import { acceptedModelExtensions, modelExtension, responseError, UploadCooldown, StagedRequest, formatRetryTime } from './upload-control.js?v=77cf5641f5dbcca4';
 import { ModelPreview, previewDimensions, supportsModelPreview } from './model-preview.js?v=459fe3dab76dbfbb';
-import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, orderRequestQueue, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=88b76d2431de8c2c';
+import { STATUSES, COMPLETION_HOURS, PROGRESS_STAGES, completionInputValue, completionFromInput, completionAfterHours, isCurrentRequest, orderRequestQueue, partProgressCounts, publicQueueRecords, requestProgress, WorkflowActions } from './workflow.js?v=fb83650ec2581f99';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -579,7 +579,7 @@ async function lookupStatus(email = $('#status-email').value) {
       badge.dataset.status = request.status;
       badge.textContent = request.status;
       const details = document.createElement('dl'); details.className = 'details-list';
-      const facts = [['Queue position', request.queuePosition ? `#${request.queuePosition}` : '—'], ['Estimated completion', completionText(request)]];
+      const facts = [['Estimated completion', completionText(request)]];
       const partProgress = partProgressCounts(request.partProgress);
       if (partProgress) facts.push(['Files printed', `${partProgress.printed} of ${partProgress.total}`]);
       if (request.stageStartedAt) facts.push(['Stage started', formatDate(request.stageStartedAt, {timeZoneName:'short'})]);
@@ -651,10 +651,6 @@ function renderPreference(value, kind, label = '') {
 function renderQueueRow(request) {
   const row = document.createElement('div');
   row.className = 'public-row';
-  const rank = document.createElement('span');
-  rank.className = 'queue-rank';
-  rank.textContent = request.queuePosition ? `#${request.queuePosition}` : '—';
-
   const title = document.createElement('div');
   title.className = 'queue-title';
   const number = document.createElement('strong');
@@ -688,7 +684,7 @@ function renderQueueRow(request) {
     completed.textContent = `Completed: ${formatDate(request.completedAt, {timeZoneName:'short'})}`;
     timing.append(completed);
   }
-  row.append(rank, title, preferences, timing, renderProgressTracker(request, true));
+  row.append(title, preferences, timing, renderProgressTracker(request, true));
   return row;
 }
 
@@ -700,7 +696,6 @@ async function loadPublicQueue() {
   try {
     const result = await api('queue');
     const requests = publicQueueRecords(result.requests || []);
-    if ($('#queue-sort').value==='priority') requests.sort((a,b)=>(a.queuePosition??Infinity)-(b.queuePosition??Infinity));
     setMessage('#queue-message', requests.length ? '' : 'No requests in the queue.');
     const snapshot = JSON.stringify(requests);
     if (snapshot === queueSnapshot) return;
@@ -715,7 +710,6 @@ async function loadPublicQueue() {
     $('#refresh-queue').disabled = false;
   }
 }
-$('#queue-sort').addEventListener('change',loadPublicQueue);
 $('#refresh-queue').addEventListener('click', loadPublicQueue);
 
 async function navigate() {

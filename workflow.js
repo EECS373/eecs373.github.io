@@ -143,7 +143,7 @@ export function partProgressCounts(progress) {
 export function publicQueueRecords(requests, now = Date.now()) {
   return requests.filter(request => STATUSES.includes(request.status) && isCurrentRequest(request, now)).map(request => ({
     requestNumber: request.requestNumber, status: request.status,
-    queuePosition: request.queuePosition, estimatedCompletionAt: request.estimatedCompletionAt, stageStartedAt: request.stageStartedAt,
+    estimatedCompletionAt: request.estimatedCompletionAt, stageStartedAt: request.stageStartedAt,
     completedAt: request.completedAt, materialSummary: request.materialSummary, colorSummary: request.colorSummary,
     partProgress: partProgressCounts(request.partProgress),
   }));
